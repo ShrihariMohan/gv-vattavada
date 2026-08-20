@@ -251,6 +251,19 @@ describe("cross-device sync ids", () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.filter((id) => id === "rec-1-DEVICE-RESTAURANT-TABLET-01").length).toBe(1);
   });
+
+  it("does not reset a saved product price from the seed catalog", () => {
+    const state = createSeedState();
+    const parotta = state.products.find((p) => p.id === "p-parotta")!;
+    parotta.price_paise = 2000;
+    parotta.updated_at = "2026-08-21T00:00:00.000Z";
+    const next = normalizeState(state);
+    expect(next.products.find((p) => p.id === "p-parotta")?.price_paise).toBe(2000);
+    expect(next.expenses).toEqual([]);
+    expect(next.ledger).toEqual([]);
+    expect(next.invoices).toEqual([]);
+    expect(next.bookings).toEqual([]);
+  });
   it("does not reuse sequential ids across devices and pulls remote orders", async () => {
     const cloud = new MemorySupabaseAdapter();
     const a = new AppService(createSeedState("dev-aaa-aaaaaaaa"), () => new Date("2026-08-19T16:00:00.000Z"));
@@ -272,6 +285,87 @@ describe("cross-device sync ids", () => {
     expect(b.state.invoices.some((i) => i.id === bill.id)).toBe(true);
     expect(b.state.orders.some((o) => o.id === o1.id)).toBe(true);
     expect(b.state.orderItems.some((i) => i.order_id === o1.id && i.product_id === "p-tea" && i.qty === 2)).toBe(true);
+  });
+
+  it("pulls a product price change onto another device", async () => {
+    const cloud = new MemorySupabaseAdapter();
+    const a = new AppService(createSeedState("dev-a"), () => new Date("2026-08-21T10:00:00.000Z"));
+    const b = new AppService(createSeedState("dev-b"), () => new Date("2026-08-21T10:00:00.000Z"));
+    a.login("admin", "admin123");
+    b.login("admin", "admin123");
+    expect(b.state.products.find((p) => p.id === "p-parotta")?.price_paise).toBe(1500);
+    a.updateProduct("p-parotta", { price_paise: 2000 });
+    await a.processSyncQueue(cloud);
+    await b.pullFromRemote(cloud, { full: true });
+    expect(b.state.products.find((p) => p.id === "p-parotta")?.price_paise).toBe(2000);
+  });
+});
+
+describe("stay CRUD", () => {
+  it("links a guest and room through booking, check-in, and checkout", () => {
+    const s = svc();
+    const guest = s.createCustomer({ name: "Meera Nair", phone: "9000000101" });
+    const room = s.createRoom({
+      business_id: "biz-stay-b",
+      number: "210",
+      name: "Mist 210",
+      capacity: 2,
+      base_price_paise: 280000,
+    });
+    const booking = s.createBooking({
+      business_id: "biz-stay-b",
+      customer_id: guest.id,
+      room_id: room.id,
+      check_in: "2026-08-25",
+      check_out: "2026-08-27",
+      adults: 2,
+      children: 0,
+      rate_paise: 280000,
+    });
+    expect(s.state.rooms.find((r) => r.id === room.id)?.status).toBe("RESERVED");
+    expect(() =>
+      s.createBooking({
+        business_id: "biz-stay-b",
+        customer_id: guest.id,
+        room_id: room.id,
+        check_in: "2026-08-26",
+        check_out: "2026-08-28",
+        adults: 1,
+        children: 0,
+        rate_paise: 280000,
+      }),
+    ).toThrow(/already booked/);
+    s.updateBooking(booking.id, { check_out: "2026-08-28", rate_paise: 300000 });
+    expect(s.state.bookings.find((b) => b.id === booking.id)?.rate_paise).toBe(300000);
+    expect(s.state.bookings.find((b) => b.id === booking.id)?.total_paise).toBe(900000);
+    s.checkIn(booking.id);
+    expect(s.state.rooms.find((r) => r.id === room.id)?.status).toBe("OCCUPIED");
+    expect(() => s.deleteCustomer(guest.id)).toThrow(/active booking/);
+    expect(() => s.deleteRoom(room.id)).toThrow(/active booking/);
+    s.checkOut(booking.id, { food_paise: 12000 });
+    expect(s.state.rooms.find((r) => r.id === room.id)?.status).toBe("CLEANING");
+    s.updateRoom(room.id, { status: "AVAILABLE" });
+    expect(s.state.rooms.find((r) => r.id === room.id)?.status).toBe("AVAILABLE");
+    s.deleteCustomer(guest.id);
+    expect(s.state.customers.find((c) => c.id === guest.id)?.deleted_at).toBeTruthy();
+  });
+
+  it("cancels a reservation and frees the room", () => {
+    const s = svc();
+    const booking = s.createBooking({
+      business_id: "biz-stay-a",
+      customer_id: "cust-1",
+      room_id: "r-104",
+      check_in: "2026-08-25",
+      check_out: "2026-08-26",
+      adults: 1,
+      children: 0,
+      rate_paise: 450000,
+    });
+    expect(s.state.rooms.find((r) => r.id === "r-104")?.status).toBe("RESERVED");
+    s.cancelBooking(booking.id);
+    expect(s.state.bookings.find((b) => b.id === booking.id)?.status).toBe("CANCELLED");
+    expect(s.state.rooms.find((r) => r.id === "r-104")?.status).toBe("AVAILABLE");
   });
 });
 

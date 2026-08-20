@@ -35,7 +35,6 @@ import type {
   AppState,
   AuditLog,
   Booking,
-  BookingStatus,
   Business,
   ConflictRecord,
   Customer,
@@ -54,7 +53,9 @@ import type {
   RestaurantTable,
   Role,
   Room,
+  RoomType,
   Shift,
+  SyncMeta,
   SyncQueueItem,
   User,
 } from "./types";
@@ -148,6 +149,12 @@ export class AppService {
     };
   }
 
+  private stamp<T extends SyncMeta>(row: T) {
+    row.updated_at = this.now();
+    row.version += 1;
+    row.sync_status = "PENDING";
+  }
+
   private enqueue(entity_type: EntityType, entity_id: string, operation: SyncQueueItem["operation"], payload: unknown, depends_on: string[] = []) {
     const item: SyncQueueItem = {
       id: this.id("q"),
@@ -239,6 +246,38 @@ export class AppService {
     this.state.customers.push(c);
     this.enqueue("customer", c.id, "CREATE", c);
     return c;
+  }
+
+  updateCustomer(id: string, input: { name: string; phone: string; email?: string; address?: string; notes?: string }): Customer {
+    this.requireUser();
+    const c = this.state.customers.find((x) => x.id === id && !x.deleted_at);
+    if (!c) throw new Error("Guest not found");
+    Object.assign(c, {
+      name: input.name,
+      phone: input.phone,
+      email: input.email ?? "",
+      address: input.address ?? "",
+      notes: input.notes ?? "",
+    });
+    this.stamp(c);
+    this.enqueue("customer", c.id, "UPDATE", c);
+    return c;
+  }
+
+  deleteCustomer(id: string) {
+    this.require("bookings.manage");
+    const c = this.state.customers.find((x) => x.id === id && !x.deleted_at);
+    if (!c) throw new Error("Guest not found");
+    const active = this.state.bookings.some(
+      (b) =>
+        b.customer_id === id &&
+        !b.deleted_at &&
+        (b.status === "ENQUIRY" || b.status === "RESERVED" || b.status === "CHECKED_IN"),
+    );
+    if (active) throw new Error("Cannot delete a guest with an active booking");
+    c.deleted_at = this.now();
+    this.stamp(c);
+    this.enqueue("customer", c.id, "DELETE", c);
   }
 
   startOrder(opts: {
@@ -707,15 +746,12 @@ export class AppService {
     payment_method?: PaymentMethod;
   }): Booking {
     this.require("bookings.manage");
-    const conflict = this.state.bookings.find(
-      (b) =>
-        b.room_id === input.room_id &&
-        !b.deleted_at &&
-        !["CANCELLED", "NO_SHOW", "CHECKED_OUT"].includes(b.status) &&
-        input.check_in < b.check_out &&
-        b.check_in < input.check_out,
-    );
-    if (conflict) throw new Error("Room already booked for those dates");
+    const customer = this.state.customers.find((c) => c.id === input.customer_id && !c.deleted_at);
+    if (!customer) throw new Error("Guest not found");
+    const room = this.state.rooms.find((r) => r.id === input.room_id && !r.deleted_at);
+    if (!room) throw new Error("Room not found");
+    if (room.business_id !== input.business_id) throw new Error("Room belongs to another property");
+    this.assertRoomFree(input.room_id, input.check_in, input.check_out);
     const totals = bookingTotals({
       check_in: input.check_in,
       check_out: input.check_out,
@@ -767,13 +803,100 @@ export class AppService {
     return booking;
   }
 
+  updateBooking(
+    id: string,
+    input: {
+      customer_id?: string;
+      room_id?: string;
+      check_in?: string;
+      check_out?: string;
+      adults?: number;
+      children?: number;
+      rate_paise?: number;
+      notes?: string;
+    },
+  ): Booking {
+    this.require("bookings.manage");
+    const b = this.mustBooking(id);
+    if (b.status === "CHECKED_OUT" || b.status === "CANCELLED" || b.status === "NO_SHOW") {
+      throw new Error("Cannot edit a completed or cancelled booking");
+    }
+    const customerId = input.customer_id ?? b.customer_id;
+    if (!this.state.customers.some((c) => c.id === customerId && !c.deleted_at)) {
+      throw new Error("Guest not found");
+    }
+    const roomId = input.room_id ?? b.room_id;
+    const room = this.state.rooms.find((r) => r.id === roomId && !r.deleted_at);
+    if (!room) throw new Error("Room not found");
+    if (room.business_id !== b.business_id) throw new Error("Room belongs to another property");
+    const checkInAt = input.check_in ?? b.check_in;
+    const checkOutAt = input.check_out ?? b.check_out;
+    daysBetween(checkInAt, checkOutAt);
+    this.assertRoomFree(roomId, checkInAt, checkOutAt, b.id);
+    const oldRoomId = b.room_id;
+    b.customer_id = customerId;
+    b.room_id = roomId;
+    b.check_in = checkInAt;
+    b.check_out = checkOutAt;
+    b.adults = input.adults ?? b.adults;
+    b.children = input.children ?? b.children;
+    b.rate_paise = input.rate_paise ?? b.rate_paise;
+    b.notes = input.notes ?? b.notes;
+    const totals = bookingTotals({
+      check_in: b.check_in,
+      check_out: b.check_out,
+      rate_paise: b.rate_paise,
+      extra_charges_paise: b.extra_charges_paise,
+      food_paise: b.food_paise,
+      extra_bed_paise: b.extra_bed_paise,
+      activities_paise: b.activities_paise,
+      other_income_paise: b.other_income_paise,
+      discount_paise: b.discount_paise,
+      tax_bps: 0,
+      paid_paise: b.paid_paise,
+    });
+    b.tax_paise = totals.tax_paise;
+    b.total_paise = totals.total_paise;
+    b.balance_paise = totals.balance_amount_paise;
+    this.stamp(b);
+    if (oldRoomId !== roomId) {
+      this.refreshRoomOccupancy(oldRoomId);
+      const next = roomStatusForBooking(b.status);
+      if (next) this.setRoomStatus(roomId, next);
+    }
+    this.enqueue("booking", b.id, "UPDATE", b);
+    return b;
+  }
+
+  cancelBooking(id: string): Booking {
+    this.require("bookings.manage");
+    const b = this.mustBooking(id);
+    if (b.status === "CHECKED_OUT") throw new Error("Cannot cancel a completed stay");
+    if (b.status === "CANCELLED") return b;
+    b.status = "CANCELLED";
+    this.stamp(b);
+    this.refreshRoomOccupancy(b.room_id);
+    this.enqueue("booking", b.id, "UPDATE", b);
+    return b;
+  }
+
+  deleteBooking(id: string) {
+    this.require("bookings.manage");
+    const b = this.mustBooking(id);
+    if (b.status === "CHECKED_IN") throw new Error("Check out or cancel this booking before deleting it");
+    b.deleted_at = this.now();
+    this.stamp(b);
+    this.refreshRoomOccupancy(b.room_id);
+    this.enqueue("booking", b.id, "DELETE", b);
+  }
+
   checkIn(bookingId: string) {
     this.require("bookings.manage");
     const b = this.mustBooking(bookingId);
     if (b.status !== "RESERVED" && b.status !== "ENQUIRY") throw new Error("Cannot check in");
     if (b.status === "ENQUIRY") b.status = "RESERVED";
     b.status = "CHECKED_IN";
-    b.updated_at = this.now();
+    this.stamp(b);
     this.setRoomStatus(b.room_id, roomStatusForBooking("CHECKED_IN")!);
     this.enqueue("booking", b.id, "UPDATE", b);
     return b;
@@ -803,7 +926,7 @@ export class AppService {
     b.total_paise = totals.total_paise;
     b.balance_paise = totals.balance_amount_paise;
     b.status = "CHECKED_OUT";
-    b.updated_at = this.now();
+    this.stamp(b);
     this.setRoomStatus(b.room_id, "CLEANING");
     this.enqueue("booking", b.id, "UPDATE", b);
     this.pushLedger({
@@ -854,6 +977,86 @@ export class AppService {
       this.enqueue("invoice_item", ii.id, "CREATE", ii);
     }
     return invoice;
+  }
+
+  createRoom(input: {
+    business_id: string;
+    number: string;
+    name?: string;
+    capacity: number;
+    base_price_paise: number;
+    room_type_id?: string;
+  }): Room {
+    this.require("bookings.manage");
+    const biz = this.state.businesses.find((b) => b.id === input.business_id);
+    if (!biz || biz.type !== "STAY") throw new Error("Pick a stay property");
+    const number = input.number.trim();
+    if (!number) throw new Error("Room number is required");
+    if (this.state.rooms.some((r) => !r.deleted_at && r.business_id === input.business_id && r.number === number)) {
+      throw new Error("That room number already exists");
+    }
+    const typeId = input.room_type_id || this.defaultRoomType(input.business_id).id;
+    const r: Room = {
+      ...this.meta(),
+      business_id: input.business_id,
+      room_type_id: typeId,
+      number,
+      name: (input.name ?? "").trim() || number,
+      capacity: input.capacity,
+      base_price_paise: input.base_price_paise,
+      status: "AVAILABLE",
+    };
+    this.state.rooms.push(r);
+    this.enqueue("room", r.id, "CREATE", r);
+    return r;
+  }
+
+  updateRoom(
+    id: string,
+    input: {
+      number?: string;
+      name?: string;
+      capacity?: number;
+      base_price_paise?: number;
+      room_type_id?: string;
+      status?: Room["status"];
+    },
+  ): Room {
+    this.require("bookings.manage");
+    const r = this.state.rooms.find((x) => x.id === id && !x.deleted_at);
+    if (!r) throw new Error("Room not found");
+    if (input.number && input.number !== r.number) {
+      if (this.state.rooms.some((x) => !x.deleted_at && x.business_id === r.business_id && x.number === input.number)) {
+        throw new Error("That room number already exists");
+      }
+    }
+    Object.assign(r, {
+      number: input.number?.trim() || r.number,
+      name: input.name !== undefined ? input.name.trim() || r.number : r.name,
+      capacity: input.capacity ?? r.capacity,
+      base_price_paise: input.base_price_paise ?? r.base_price_paise,
+      room_type_id: input.room_type_id ?? r.room_type_id,
+    });
+    if (input.status) r.status = input.status;
+    this.stamp(r);
+    this.enqueue("room", r.id, "UPDATE", r);
+    return r;
+  }
+
+  deleteRoom(id: string) {
+    this.require("bookings.manage");
+    const r = this.state.rooms.find((x) => x.id === id && !x.deleted_at);
+    if (!r) throw new Error("Room not found");
+    const active = this.state.bookings.some(
+      (b) =>
+        b.room_id === id &&
+        !b.deleted_at &&
+        (b.status === "ENQUIRY" || b.status === "RESERVED" || b.status === "CHECKED_IN"),
+    );
+    if (active) throw new Error("Cannot delete a room with an active booking");
+    r.deleted_at = this.now();
+    this.stamp(r);
+    this.enqueue("room", r.id, "DELETE", r);
   }
 
   createExpense(input: {
@@ -1113,13 +1316,18 @@ export class AppService {
   }
 
   calendar(businessId: string, from: string, to: string) {
-    const rooms = this.state.rooms.filter((r) => r.business_id === businessId);
+    const rooms = this.state.rooms.filter((r) => r.business_id === businessId && !r.deleted_at);
     const dates = eachDate(from, to);
     return rooms.map((room) => ({
       room,
       days: dates.map((d) => {
         const booking = this.state.bookings.find(
-          (b) => b.room_id === room.id && d >= b.check_in && d < b.check_out && !["CANCELLED", "NO_SHOW"].includes(b.status),
+          (b) =>
+            b.room_id === room.id &&
+            !b.deleted_at &&
+            d >= b.check_in &&
+            d < b.check_out &&
+            !["CANCELLED", "NO_SHOW"].includes(b.status),
         );
         return { date: d, booking };
       }),
@@ -1158,6 +1366,7 @@ export class AppService {
   }
 
   applyRemoteRecords(records: RemoteSyncRecord[]): number {
+    if (!records.length) return 0;
     let applied = 0;
     const pending = new Set(
       this.state.syncQueue.filter((q) => !q.synced_at).map((q) => `${q.entity_type}:${q.entity_id}`),
@@ -1189,20 +1398,27 @@ export class AppService {
         continue;
       }
       if (!payload || typeof payload.id !== "string") continue;
+      if (payload.notes === "seed") continue;
       const idx = col.findIndex((x) => x.id === payload!.id);
-      const next = { ...payload, sync_status: "SYNCED" } as unknown as { id: string };
-      if (idx >= 0) col[idx] = { ...col[idx], ...next };
-      else col.push(next);
+      const remoteUpdated = String(payload.updated_at ?? rec.updated_at ?? "");
+      if (idx >= 0) {
+        const local = col[idx] as { updated_at?: string };
+        const localUpdated = String(local.updated_at ?? "");
+        if (localUpdated && remoteUpdated && localUpdated > remoteUpdated) continue;
+        col[idx] = { ...col[idx], ...payload, sync_status: "SYNCED" } as unknown as { id: string };
+      } else {
+        col.push({ ...payload, sync_status: "SYNCED" } as unknown as { id: string });
+      }
       applied += 1;
     }
-    this.state.lastPulledAt = latest ?? this.now();
+    if (latest) this.state.lastPulledAt = latest;
     this.state.lastSyncedAt = this.now();
     return applied;
   }
 
-  async pullFromRemote(adapter: SyncAdapter): Promise<number> {
+  async pullFromRemote(adapter: SyncAdapter, opts?: { full?: boolean }): Promise<number> {
     if (!adapter.pull) return 0;
-    const records = await adapter.pull(this.state.lastPulledAt);
+    const records = await adapter.pull(opts?.full ? null : this.state.lastPulledAt);
     return this.applyRemoteRecords(records);
   }
 
@@ -1328,9 +1544,51 @@ export class AppService {
     }
   }
 
+  private defaultRoomType(businessId: string): RoomType {
+    const existing = this.state.roomTypes.find((t) => t.business_id === businessId);
+    if (existing) return existing;
+    const t: RoomType = {
+      id: this.id("rt"),
+      business_id: businessId,
+      name: "Standard",
+      capacity: 2,
+      base_price_paise: 250000,
+    };
+    this.state.roomTypes.push(t);
+    return t;
+  }
+
+  private assertRoomFree(roomId: string, checkIn: string, checkOut: string, exceptBookingId?: string) {
+    const clash = this.state.bookings.find(
+      (x) =>
+        x.room_id === roomId &&
+        x.id !== exceptBookingId &&
+        !x.deleted_at &&
+        !["CANCELLED", "NO_SHOW", "CHECKED_OUT"].includes(x.status) &&
+        checkIn < x.check_out &&
+        x.check_in < checkOut,
+    );
+    if (clash) throw new Error("Room is already booked for those dates");
+  }
+
+  private refreshRoomOccupancy(roomId: string) {
+    const live = this.state.bookings.find(
+      (b) =>
+        b.room_id === roomId &&
+        !b.deleted_at &&
+        (b.status === "CHECKED_IN" || b.status === "RESERVED" || b.status === "ENQUIRY"),
+    );
+    if (live?.status === "CHECKED_IN") this.setRoomStatus(roomId, "OCCUPIED");
+    else if (live) this.setRoomStatus(roomId, "RESERVED");
+    else this.setRoomStatus(roomId, "AVAILABLE");
+  }
+
   private setRoomStatus(roomId: string, status: Room["status"]) {
-    const room = this.state.rooms.find((r) => r.id === roomId);
-    if (room) room.status = status;
+    const room = this.state.rooms.find((r) => r.id === roomId && !r.deleted_at);
+    if (!room || room.status === status) return;
+    room.status = status;
+    this.stamp(room);
+    this.enqueue("room", room.id, "UPDATE", room);
   }
 
   private mustOrder(id: string): Order {
@@ -1340,7 +1598,7 @@ export class AppService {
   }
 
   private mustBooking(id: string): Booking {
-    const b = this.state.bookings.find((x) => x.id === id);
+    const b = this.state.bookings.find((x) => x.id === id && !x.deleted_at);
     if (!b) throw new Error("Booking not found");
     return b;
   }

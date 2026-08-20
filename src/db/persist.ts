@@ -1,5 +1,5 @@
 import Dexie, { type Table } from "dexie";
-import { createSeedState } from "@/domain/seed";
+import { createCatalogState, DEMO_RECORD_IDS, stripDemoTransactions } from "@/domain/seed";
 import { newEntityId } from "@/domain/service";
 import type { AppState, Role } from "@/domain/types";
 
@@ -54,7 +54,7 @@ export function normalizeState(state: AppState): AppState {
     p.image_url ??= "";
     p.tags ??= [];
   }
-  const seeded = createSeedState(state.currentDeviceId);
+  const seeded = createCatalogState(state.currentDeviceId);
   for (const cat of seeded.productCategories) {
     if (!state.productCategories.some((c) => c.id === cat.id)) state.productCategories.push(cat);
   }
@@ -62,15 +62,12 @@ export function normalizeState(state: AppState): AppState {
     const existing = state.products.find((x) => x.id === p.id);
     if (!existing) state.products.push(p);
     else {
-      existing.name = p.name;
-      existing.price_paise = p.price_paise;
-      existing.category_id = p.category_id;
-      existing.description = p.description;
-      existing.image_url = p.image_url;
-      existing.tags = [...p.tags];
-      existing.tax_bps = p.tax_bps;
+      if (!existing.description) existing.description = p.description;
+      if (!existing.image_url) existing.image_url = p.image_url;
+      if (!existing.tags?.length) existing.tags = [...p.tags];
     }
   }
+  stripDemoTransactions(state);
   for (const c of state.dailyClosings) {
     c.status ??= "CLOSED";
     c.reopened_at ??= null;
@@ -88,13 +85,47 @@ export function normalizeState(state: AppState): AppState {
   for (const u of state.users) {
     if (!known.includes(u.role)) u.role = "STAFF";
   }
-  const extraUsers = createSeedState(state.currentDeviceId).users;
+  const extraUsers = createCatalogState(state.currentDeviceId).users;
   for (const u of extraUsers) {
     if (!state.users.some((x) => x.username === u.username)) state.users.push(u);
   }
   state.lastPulledAt ??= null;
   remintDuplicateIds(state);
   return state;
+}
+
+const TRANSACTION_KEYS = [
+  "customers",
+  "orders",
+  "orderItems",
+  "bookings",
+  "invoices",
+  "invoiceItems",
+  "payments",
+  "expenses",
+  "ledger",
+  "products",
+  "rooms",
+  "dailyClosings",
+] as const;
+
+/** Keep unsynced local rows and any real rows the cloud does not have yet. Never restore demo ids. */
+export function mergeLocalSafety(base: AppState, local: AppState) {
+  base.syncQueue = local.syncQueue ?? [];
+  base.currentUserId = local.currentUserId;
+  for (const key of TRANSACTION_KEYS) {
+    const rows = local[key] as { id: string; sync_status?: string; updated_at?: string }[];
+    const dest = base[key] as { id: string; sync_status?: string; updated_at?: string }[];
+    for (const row of rows) {
+      if (DEMO_RECORD_IDS.has(row.id)) continue;
+      const idx = dest.findIndex((r) => r.id === row.id);
+      if (idx < 0) {
+        dest.push(row as never);
+        continue;
+      }
+      if (row.sync_status === "PENDING") dest[idx] = row as never;
+    }
+  }
 }
 
 /** Old sequential ids (`rec-1-DEVICE-…`) collided after reload; keep one row per id. */
@@ -107,6 +138,7 @@ function remintDuplicateIds(state: AppState) {
   keepNewestAndRemint(state.payments, "pay", device);
   keepNewestAndRemint(state.customers, "cust", device);
   keepNewestAndRemint(state.bookings, "bk", device);
+  keepNewestAndRemint(state.rooms, "rm", device);
 }
 
 function keepNewestAndRemint<T extends { id: string; updated_at?: string; created_at?: string }>(

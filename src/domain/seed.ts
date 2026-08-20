@@ -408,3 +408,61 @@ export function createSeedState(deviceId = "DEVICE-RESTAURANT-TABLET-01"): AppSt
   state.lastSyncedAt = utc("2026-08-19T09:42:00.000Z");
   return state;
 }
+
+export const DEMO_RECORD_IDS = new Set([
+  "cust-1",
+  "ord-open",
+  "ord-held",
+  "oi-1",
+  "oi-2",
+  "bk-1",
+  "bk-2",
+  "inv-hist-1",
+  "inv-hist-2",
+  "inv-hist-3",
+  "ii-1",
+  "ii-2",
+  "ii-3",
+  "pay-1",
+  "pay-2",
+  "ex-1",
+  "ex-2",
+  "led-1",
+  "led-2",
+  "led-3",
+  "led-4",
+]);
+
+export function stripDemoTransactions(state: AppState) {
+  const keep = <T extends { id: string }>(rows: T[]) => rows.filter((r) => !DEMO_RECORD_IDS.has(r.id));
+  state.customers = keep(state.customers);
+  state.orders = keep(state.orders);
+  state.orderItems = keep(state.orderItems);
+  state.bookings = keep(state.bookings);
+  state.invoices = state.invoices.filter((i) => i.notes !== "seed" && !DEMO_RECORD_IDS.has(i.id));
+  state.invoiceItems = keep(state.invoiceItems);
+  state.payments = keep(state.payments);
+  state.expenses = keep(state.expenses);
+  state.ledger = keep(state.ledger);
+  for (const t of state.tables) {
+    if (t.current_order_id && DEMO_RECORD_IDS.has(t.current_order_id)) {
+      t.current_order_id = null;
+      t.status = "AVAILABLE";
+    }
+  }
+  const booked = new Set(state.bookings.filter((b) => !["CANCELLED", "NO_SHOW", "CHECKED_OUT"].includes(b.status)).map((b) => b.room_id));
+  for (const r of state.rooms) {
+    if (!booked.has(r.id) && (r.status === "OCCUPIED" || r.status === "RESERVED")) r.status = "AVAILABLE";
+  }
+}
+
+/** Live devices: catalog only. Tests keep createSeedState() with sample tickets. */
+export function createCatalogState(deviceId = "DEVICE-RESTAURANT-TABLET-01"): AppState {
+  const state = createSeedState(deviceId);
+  stripDemoTransactions(state);
+  state.dailyClosings = [];
+  state.shifts = [];
+  state.conflicts = [];
+  state.syncQueue = [];
+  return state;
+}

@@ -108,7 +108,7 @@ export default function SettingsPage() {
               onClick={async () => {
                 service.setOnline(true);
                 const pushed = await service.processSyncQueue(syncAdapter);
-                const pulled = await service.pullFromRemote(syncAdapter);
+                const pulled = await service.pullFromRemote(syncAdapter, { full: true });
                 toast.success(`${pushed.filter((x) => x.ok).length} pushed · ${pulled} pulled`);
                 refresh();
               }}

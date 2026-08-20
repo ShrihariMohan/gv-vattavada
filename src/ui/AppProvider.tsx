@@ -1,8 +1,8 @@
 "use client";
 
-import { createSeedState } from "@/domain/seed";
+import { createCatalogState } from "@/domain/seed";
 import { AppService, createDefaultSyncAdapter, type SyncAdapter } from "@/domain/service";
-import { loadState, normalizeState, saveState } from "@/db/persist";
+import { loadState, mergeLocalSafety, normalizeState, saveState } from "@/db/persist";
 import type { AppState, Role, User } from "@/domain/types";
 import { registerAppServiceWorker } from "@/pwa/service-worker";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -49,7 +49,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     flushing.current = true;
     try {
       await svc.current.processSyncQueue(adapter.current);
-      await svc.current.pullFromRemote(adapter.current);
+      await svc.current.pullFromRemote(adapter.current, { full: true });
       await saveState(svc.current.state);
       setTick((t) => t + 1);
     } catch {
@@ -68,21 +68,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       const stored = await loadState();
-      const state: AppState = stored ?? createSeedState(deviceId());
-      state.currentDeviceId = deviceId();
-      state.online = navigator.onLine;
+      const catalog = createCatalogState(deviceId());
+      catalog.currentDeviceId = deviceId();
+      catalog.online = navigator.onLine;
+      if (stored) mergeLocalSafety(catalog, stored);
       if (cancelled) return;
-      svc.current = new AppService(state);
+      svc.current = new AppService(catalog);
       try {
         const health = await fetch("/api/sync?health=1");
         const info = (await health.json()) as { configured?: boolean };
         if (info.configured) {
           await svc.current.processSyncQueue(adapter.current);
-          await svc.current.pullFromRemote(adapter.current);
+          await svc.current.pullFromRemote(adapter.current, { full: true });
+          if (stored) mergeLocalSafety(svc.current.state, stored);
           await saveState(svc.current.state);
+        } else if (stored) {
+          svc.current.replaceState(normalizeState(stored));
+          svc.current.state.currentDeviceId = deviceId();
         }
       } catch {
-        /* first paint still works offline */
+        if (stored) {
+          svc.current.replaceState(normalizeState(stored));
+          svc.current.state.currentDeviceId = deviceId();
+        }
       }
       if (!cancelled) {
         setReady(true);
@@ -131,7 +139,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(() => {
-    const service = svc.current ?? new AppService(createSeedState(deviceId()));
+    const service = svc.current ?? new AppService(createCatalogState(deviceId()));
     const user = service.state.users.find((u) => u.id === service.state.currentUserId) ?? null;
     const role: Role | null = user?.role ?? null;
     return {

@@ -35,9 +35,11 @@ import {
   Search,
   LogOut,
   Menu,
+  Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { PUBLIC_SITES } from "@/marketing/sites";
 
 const GROUPS: { title: string; items: { href: string; label: string; icon: typeof LayoutDashboard; permission?: Parameters<typeof canRole>[1] }[] }[] = [
   {
@@ -259,6 +261,38 @@ export function Shell({ children }: { children: ReactNode }) {
                 </div>
               );
             })}
+            <div>
+              <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Public sites</p>
+              <nav className="grid grid-cols-2 gap-1">
+                <Link
+                  href="/"
+                  onClick={() => setMoreOpen(false)}
+                  className="flex items-center gap-2 rounded-lg bg-muted/60 px-2.5 py-2 text-sm"
+                >
+                  <Globe className="size-4 shrink-0" />
+                  Home
+                </Link>
+                {PUBLIC_SITES.map((s) => (
+                  <Link
+                    key={s.slug}
+                    href={`/${s.slug}`}
+                    onClick={() => setMoreOpen(false)}
+                    className="flex items-center gap-2 rounded-lg bg-muted/60 px-2.5 py-2 text-sm"
+                  >
+                    <Globe className="size-4 shrink-0" />
+                    {s.name}
+                  </Link>
+                ))}
+                <Link
+                  href="/menu"
+                  onClick={() => setMoreOpen(false)}
+                  className="flex items-center gap-2 rounded-lg bg-muted/60 px-2.5 py-2 text-sm"
+                >
+                  <UtensilsCrossed className="size-4 shrink-0" />
+                  Kitchen menu
+                </Link>
+              </nav>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
