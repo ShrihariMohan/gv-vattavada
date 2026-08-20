@@ -1,0 +1,87 @@
+/*
+  Brand & UI colors — single source of truth.
+  Change tokens here; the staff app and public sites both inherit them.
+  After editing --pwa-theme / --pwa-background, copy those hex values
+  into public/manifest.webmanifest (theme_color / background_color).
+*/
+
+:root {
+  --pwa-theme: #0e7c7b;
+  --pwa-background: #f3f7f8;
+
+  --background: oklch(0.975 0.01 210);
+  --foreground: oklch(0.22 0.03 250);
+  --card: oklch(0.995 0.004 210);
+  --card-foreground: oklch(0.22 0.03 250);
+  --popover: oklch(0.995 0.004 210);
+  --popover-foreground: oklch(0.22 0.03 250);
+  --primary: oklch(0.48 0.1 192);
+  --primary-foreground: oklch(0.99 0.01 200);
+  --secondary: oklch(0.94 0.02 210);
+  --secondary-foreground: oklch(0.28 0.04 240);
+  --muted: oklch(0.945 0.015 210);
+  --muted-foreground: oklch(0.5 0.03 240);
+  --accent: oklch(0.82 0.12 55);
+  --accent-foreground: oklch(0.28 0.06 50);
+  --destructive: oklch(0.59 0.22 25);
+  --border: oklch(0.9 0.015 210);
+  --input: oklch(0.9 0.015 210);
+  --ring: oklch(0.5 0.1 192);
+  --chart-1: oklch(0.5 0.11 192);
+  --chart-2: oklch(0.72 0.12 55);
+  --chart-3: oklch(0.55 0.08 250);
+  --chart-4: oklch(0.62 0.1 145);
+  --chart-5: oklch(0.42 0.06 250);
+  --radius: 0.85rem;
+  --sidebar: oklch(0.24 0.04 245);
+  --sidebar-foreground: oklch(0.97 0.01 210);
+  --sidebar-primary: oklch(0.82 0.12 55);
+  --sidebar-primary-foreground: oklch(0.24 0.05 50);
+  --sidebar-accent: oklch(0.3 0.04 245);
+  --sidebar-accent-foreground: oklch(0.97 0.01 210);
+  --sidebar-border: oklch(0.32 0.03 245);
+  --sidebar-ring: oklch(0.72 0.1 55);
+
+  --photo-slot: oklch(0.92 0.02 210);
+  --photo-slot-fg: oklch(0.45 0.04 240);
+  --royal: oklch(0.42 0.08 70);
+  --glenn: oklch(0.5 0.08 200);
+  --kitchen: oklch(0.55 0.14 40);
+  --rental: oklch(0.48 0.12 255);
+}
+
+.dark {
+  --background: oklch(0.18 0.02 250);
+  --foreground: oklch(0.97 0.01 210);
+  --card: oklch(0.23 0.025 250);
+  --card-foreground: oklch(0.97 0.01 210);
+  --popover: oklch(0.23 0.025 250);
+  --popover-foreground: oklch(0.97 0.01 210);
+  --primary: oklch(0.72 0.1 192);
+  --primary-foreground: oklch(0.18 0.03 200);
+  --secondary: oklch(0.28 0.03 250);
+  --secondary-foreground: oklch(0.96 0.01 210);
+  --muted: oklch(0.28 0.03 250);
+  --muted-foreground: oklch(0.72 0.03 220);
+  --accent: oklch(0.7 0.12 55);
+  --accent-foreground: oklch(0.2 0.04 50);
+  --destructive: oklch(0.7 0.18 22);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.7 0.08 192);
+  --chart-1: oklch(0.72 0.1 192);
+  --chart-2: oklch(0.75 0.12 55);
+  --chart-3: oklch(0.65 0.08 250);
+  --chart-4: oklch(0.7 0.1 145);
+  --chart-5: oklch(0.8 0.04 210);
+  --sidebar: oklch(0.16 0.03 250);
+  --sidebar-foreground: oklch(0.97 0.01 210);
+  --sidebar-primary: oklch(0.75 0.12 55);
+  --sidebar-primary-foreground: oklch(0.18 0.04 50);
+  --sidebar-accent: oklch(0.24 0.03 250);
+  --sidebar-accent-foreground: oklch(0.97 0.01 210);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.7 0.1 55);
+  --photo-slot: oklch(0.28 0.03 250);
+  --photo-slot-fg: oklch(0.75 0.03 220);
+}
