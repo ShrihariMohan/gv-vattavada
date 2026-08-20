@@ -22,11 +22,11 @@ type Ctx = {
 const AppCtx = createContext<Ctx | null>(null);
 
 function deviceId() {
-  if (typeof window === "undefined") return "DEVICE-RESTAURANT-TABLET-01";
+  if (typeof window === "undefined") return crypto.randomUUID();
   const key = "vbm-device-id";
   let id = localStorage.getItem(key);
-  if (!id) {
-    id = "DEVICE-RESTAURANT-TABLET-01";
+  if (!id || id === "DEVICE-RESTAURANT-TABLET-01") {
+    id = crypto.randomUUID();
     localStorage.setItem(key, id);
   }
   return id;
@@ -37,17 +37,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [tick, setTick] = useState(0);
   const svc = useRef<AppService | null>(null);
   const adapter = useRef<SyncAdapter>(createDefaultSyncAdapter());
+  const flushing = useRef(false);
 
-  const refresh = useCallback(() => {
+  const persistTick = useCallback(() => {
     if (svc.current) void saveState(svc.current.state);
     setTick((t) => t + 1);
   }, []);
 
   const flushQueue = useCallback(async () => {
-    if (!svc.current?.state.online) return;
-    await svc.current.processSyncQueue(adapter.current);
-    refresh();
-  }, [refresh]);
+    if (!svc.current?.state.online || flushing.current) return;
+    flushing.current = true;
+    try {
+      await svc.current.processSyncQueue(adapter.current);
+      await svc.current.pullFromRemote(adapter.current);
+      await saveState(svc.current.state);
+      setTick((t) => t + 1);
+    } catch {
+      /* stay on local Dexie if cloud is down */
+    } finally {
+      flushing.current = false;
+    }
+  }, []);
+
+  const refresh = useCallback(() => {
+    persistTick();
+    if (svc.current && svc.current.pendingCount() > 0) void flushQueue();
+  }, [persistTick, flushQueue]);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,16 +71,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const state: AppState = stored ?? createSeedState(deviceId());
       state.currentDeviceId = deviceId();
       state.online = navigator.onLine;
+      if (cancelled) return;
+      svc.current = new AppService(state);
+      try {
+        const health = await fetch("/api/sync?health=1");
+        const info = (await health.json()) as { configured?: boolean };
+        if (info.configured) {
+          await svc.current.processSyncQueue(adapter.current);
+          await svc.current.pullFromRemote(adapter.current);
+          await saveState(svc.current.state);
+        }
+      } catch {
+        /* first paint still works offline */
+      }
       if (!cancelled) {
-        svc.current = new AppService(state);
         setReady(true);
-        refresh();
+        persistTick();
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [refresh]);
+  }, [persistTick]);
 
   useEffect(() => {
     if (!ready) return;
@@ -80,7 +107,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     const off = () => {
       svc.current?.setOnline(false);
-      refresh();
+      persistTick();
     };
     const onMessage = (event: MessageEvent) => {
       if (event.data?.type === "FLUSH_SYNC") void flushQueue();
@@ -97,7 +124,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       navigator.serviceWorker?.removeEventListener("message", onMessage);
       window.clearInterval(t);
     };
-  }, [flushQueue, refresh]);
+  }, [flushQueue, persistTick]);
 
   useEffect(() => {
     void registerAppServiceWorker();

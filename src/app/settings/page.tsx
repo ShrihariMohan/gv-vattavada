@@ -99,18 +99,37 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Sync</CardTitle>
-            <CardDescription>{service.pendingCount()} change(s) waiting. Cloud ingest is /api/sync when enabled.</CardDescription>
+            <CardDescription>
+              Pending: {service.pendingCount()}. Cloud is /api/sync. Other devices receive bills only after a successful pull.
+            </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-wrap gap-2">
             <Button
               onClick={async () => {
                 service.setOnline(true);
-                const r = await service.processSyncQueue(syncAdapter);
-                toast.success(`${r.filter((x) => x.ok).length} synced`);
+                const pushed = await service.processSyncQueue(syncAdapter);
+                const pulled = await service.pullFromRemote(syncAdapter);
+                toast.success(`${pushed.filter((x) => x.ok).length} pushed · ${pulled} pulled`);
                 refresh();
               }}
             >
               Sync now
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  const res = await fetch("/api/sync?health=1");
+                  const info = (await res.json()) as { configured?: boolean; ok?: boolean; error?: string; count?: number };
+                  if (!info.configured) toast.error("Supabase not configured", { description: info.error });
+                  else if (!info.ok) toast.error("Supabase error", { description: info.error });
+                  else toast.success("Supabase connected", { description: `${info.count ?? 0} cloud records` });
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Health check failed");
+                }
+              }}
+            >
+              Test cloud
             </Button>
           </CardContent>
         </Card>

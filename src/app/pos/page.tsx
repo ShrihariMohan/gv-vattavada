@@ -7,7 +7,7 @@ import { StatusBadge } from "@/ui/status-badge";
 import { formatINR } from "@/domain/money";
 import { KEYBOARD_SHORTCUTS } from "@/domain/rules";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { PaymentMethod } from "@/domain/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,9 +16,11 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Minus, Plus, Search } from "lucide-react";
+import { Minus, Plus, Receipt, Search } from "lucide-react";
 import { productMatchesQuery, productMatchesSelectedTag } from "@/marketing/menu";
+import { isListedOrder } from "@/domain/bill";
 import { TagFilter } from "@/ui/tag-filter";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 export default function PosPage() {
   return (
@@ -44,6 +46,8 @@ function PosInner() {
   const [guestPhone, setGuestPhone] = useState("");
   const [roomNumber, setRoomNumber] = useState("");
   const [tableId, setTableId] = useState("");
+  const [billOpen, setBillOpen] = useState(false);
+  const tapLock = useRef(false);
 
   const order = service.state.orders.find((o) => o.id === orderId && !o.deleted_at);
   const items = service.state.orderItems.filter((i) => i.order_id === orderId && !i.deleted_at);
@@ -59,9 +63,9 @@ function PosInner() {
   const tickets = service.state.orders.filter(
     (o) =>
       o.business_id === restaurant.id &&
-      !o.deleted_at &&
       o.status !== "PAID" &&
-      o.status !== "CANCELLED",
+      o.status !== "CANCELLED" &&
+      (o.id === orderId || isListedOrder(service.state, o)),
   );
   const totals = orderId ? service.orderTotals(orderId, discount) : null;
   const canEdit = order && order.status !== "PAID" && order.status !== "CANCELLED";
@@ -83,6 +87,11 @@ function PosInner() {
   };
 
   const addProduct = (productId: string) => {
+    if (tapLock.current) return;
+    tapLock.current = true;
+    window.setTimeout(() => {
+      tapLock.current = false;
+    }, 280);
     try {
       let id = orderId;
       if (order?.status === "PAID" || order?.status === "CANCELLED") {
@@ -196,7 +205,7 @@ function PosInner() {
         {Object.entries(KEYBOARD_SHORTCUTS).map(([k, v]) => `${k} ${v}`).join(" · ")}
       </p>
 
-      <div className="grid gap-4 pb-28 lg:grid-cols-[minmax(0,1fr)_360px] lg:pb-0">
+      <div className="grid gap-4 pb-24 lg:grid-cols-[minmax(0,1fr)_360px] lg:pb-0">
         <div>
       <div className="relative mb-3">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -219,25 +228,48 @@ function PosInner() {
           return (
             <div
               key={p.id}
-              className="relative flex min-h-28 flex-col rounded-xl border bg-card p-3 text-left shadow-sm ring-1 ring-foreground/5"
+              className="relative isolate z-0 flex min-h-28 flex-col overflow-hidden rounded-xl border bg-card p-3 text-left shadow-sm ring-1 ring-foreground/5"
             >
               {qty > 0 && (
-                <Badge className="absolute right-2 top-2 tabular-nums" variant="default">
+                <Badge className="pointer-events-none absolute right-2 top-2 z-10 tabular-nums" variant="default">
                   {qty}
                 </Badge>
               )}
-              <button type="button" className="flex flex-1 flex-col text-left" onClick={() => addProduct(p.id)}>
+              <button
+                type="button"
+                className="flex flex-1 flex-col text-left"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  addProduct(p.id);
+                }}
+              >
                 <div className="pr-8 font-medium leading-tight">{p.name}</div>
                 {p.description ? <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{p.description}</div> : null}
                 <div className="mt-auto pt-2 text-sm font-medium tabular-nums">{formatINR(p.price_paise)}</div>
               </button>
               {qty > 0 && canEdit && (
                 <div className="mt-2 flex items-center gap-1">
-                  <Button size="icon-sm" variant="outline" type="button" onClick={() => bumpQty(p.id, qty - 1)}>
+                  <Button
+                    size="icon-sm"
+                    variant="outline"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      bumpQty(p.id, qty - 1);
+                    }}
+                  >
                     <Minus />
                   </Button>
                   <span className="w-6 text-center text-sm tabular-nums">{qty}</span>
-                  <Button size="icon-sm" variant="outline" type="button" onClick={() => bumpQty(p.id, qty + 1)}>
+                  <Button
+                    size="icon-sm"
+                    variant="outline"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      bumpQty(p.id, qty + 1);
+                    }}
+                  >
                     <Plus />
                   </Button>
                 </div>
@@ -249,7 +281,7 @@ function PosInner() {
       </div>
         </div>
 
-        <Card className="h-fit lg:sticky lg:top-20">
+        <Card className="hidden h-fit lg:sticky lg:top-20 lg:block">
           <CardHeader className="border-b">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-base">Current bill</CardTitle>
@@ -356,65 +388,111 @@ function PosInner() {
         </Card>
       </div>
 
-      <div className="no-print fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 p-3 backdrop-blur lg:hidden md:left-60">
-        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-2">
-          <div className="min-w-0 flex-1 text-sm">
-            {order ? (
-              <p className="truncate">
-                <StatusBadge value={order.status} />{" "}
+      <button
+        type="button"
+        className="no-print fixed bottom-20 right-4 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg lg:hidden"
+        onClick={() => setBillOpen(true)}
+        aria-label="Open bill"
+      >
+        <Receipt className="size-6" />
+        {items.length > 0 && (
+          <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-destructive px-1 text-center text-[11px] font-semibold leading-5 text-destructive-foreground">
+            {items.reduce((a, i) => a + i.qty, 0)}
+          </span>
+        )}
+      </button>
+      <Sheet open={billOpen} onOpenChange={setBillOpen}>
+        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto lg:hidden">
+          <SheetHeader>
+            <SheetTitle>Current bill</SheetTitle>
+          </SheetHeader>
+          <div className="px-4 pb-8">
+            {order && <StatusBadge value={order.status} />}
+            {order && (
+              <p className="mt-2 text-xs text-muted-foreground">
                 {[order.guest_name, order.guest_phone, order.room_number && `Rm ${order.room_number}`, tables.find((t) => t.id === order.table_id)?.name]
                   .filter(Boolean)
                   .join(" · ") || "Walk-in"}
-                {totals ? (
-                  <>
-                    {" · "}
-                    <span className="font-semibold tabular-nums">{formatINR(totals.total_paise)}</span>
-                    <span className="text-muted-foreground"> · {items.reduce((a, i) => a + i.qty, 0)} items</span>
-                  </>
-                ) : null}
               </p>
-            ) : (
-              <p className="text-muted-foreground">No ticket — tap a dish or New bill.</p>
             )}
+            <ul className="mt-4 max-h-[40vh] space-y-2 overflow-auto">
+              {items.map((i) => (
+                <li key={i.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate font-medium">{i.name}</span>
+                  <span className="flex items-center gap-1">
+                    <Button size="icon-sm" variant="outline" disabled={!canEdit} onClick={() => bumpQty(i.product_id, i.qty - 1)}>
+                      <Minus />
+                    </Button>
+                    <span className="w-5 text-center tabular-nums">{i.qty}</span>
+                    <Button size="icon-sm" variant="outline" disabled={!canEdit} onClick={() => bumpQty(i.product_id, i.qty + 1)}>
+                      <Plus />
+                    </Button>
+                    <Money paise={i.unit_price_paise * i.qty} />
+                  </span>
+                </li>
+              ))}
+              {!items.length && <p className="text-sm text-muted-foreground">Tap products to add.</p>}
+            </ul>
+            {orderId && totals && (
+              <div className="mt-4 space-y-2 border-t pt-3 text-sm">
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <Money paise={totals.subtotal_paise} />
+                </div>
+                <div className="flex justify-between">
+                  <span>Tax</span>
+                  <Money paise={totals.tax_paise} />
+                </div>
+                <div className="flex justify-between font-semibold">
+                  <span>Total</span>
+                  <Money paise={totals.total_paise} />
+                </div>
+              </div>
+            )}
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                disabled={!canEdit}
+                onClick={() => {
+                  if (!order) return;
+                  setGuestName(order.guest_name);
+                  setGuestPhone(order.guest_phone);
+                  setRoomNumber(order.room_number);
+                  setTableId(order.table_id ?? "");
+                  setBillOpen(false);
+                  setEditOpen(true);
+                }}
+              >
+                Edit
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!canEdit}
+                onClick={() => {
+                  if (!orderId) return;
+                  service.holdBill(orderId);
+                  refresh();
+                  toast.message("Held locally");
+                }}
+              >
+                Hold
+              </Button>
+              <Button
+                disabled={!canEdit || !items.length}
+                onClick={() => {
+                  setBillOpen(false);
+                  setPayOpen(true);
+                }}
+              >
+                Pay
+              </Button>
+              <Button variant="destructive" disabled={!canEdit} type="button" onClick={cancelTicket}>
+                Cancel
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!canEdit}
-              onClick={() => {
-                if (!order) return;
-                setGuestName(order.guest_name);
-                setGuestPhone(order.guest_phone);
-                setRoomNumber(order.room_number);
-                setTableId(order.table_id ?? "");
-                setEditOpen(true);
-              }}
-            >
-              Edit
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!canEdit}
-              onClick={() => {
-                if (!orderId) return;
-                service.holdBill(orderId);
-                refresh();
-                toast.message("Held locally");
-              }}
-            >
-              Hold
-            </Button>
-            <Button size="sm" disabled={!canEdit || !items.length} onClick={() => setPayOpen(true)}>
-              Pay
-            </Button>
-            <Button variant="destructive" size="sm" disabled={!canEdit} type="button" onClick={cancelTicket}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </div>
+        </SheetContent>
+      </Sheet>
 
       <Dialog open={newOpen} onOpenChange={setNewOpen}>
         <DialogContent className="sm:max-w-md">

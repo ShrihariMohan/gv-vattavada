@@ -6,7 +6,7 @@ import { can as canRole } from "@/domain/rules";
 import { useApp } from "./AppProvider";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -34,8 +34,10 @@ import {
   Settings,
   Search,
   LogOut,
+  Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 const GROUPS: { title: string; items: { href: string; label: string; icon: typeof LayoutDashboard; permission?: Parameters<typeof canRole>[1] }[] }[] = [
   {
@@ -82,6 +84,7 @@ const GROUPS: { title: string; items: { href: string; label: string; icon: typeo
 export function Shell({ children }: { children: ReactNode }) {
   const { ready, user, service, logout } = useApp();
   const path = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -191,13 +194,11 @@ export function Shell({ children }: { children: ReactNode }) {
         </aside>
         <main className="min-w-0 flex-1 p-4 pb-24 print:p-0 md:p-6">{children}</main>
       </div>
-      <nav className="no-print fixed bottom-0 left-0 right-0 z-20 grid grid-cols-5 border-t bg-card md:hidden">
+      <nav className="no-print fixed bottom-0 left-0 right-0 z-20 grid grid-cols-4 border-t bg-card md:hidden">
         {[
           ["/dashboard", "Home", LayoutDashboard],
           ["/pos", "POS", UtensilsCrossed],
           ["/bookings", "Stay", BedDouble],
-          ["/reports", "Reports", BarChart3],
-          ["/settings", "More", Settings],
         ].map(([href, label, Icon]) => (
           <Link
             key={String(href)}
@@ -211,7 +212,56 @@ export function Shell({ children }: { children: ReactNode }) {
             {String(label)}
           </Link>
         ))}
+        <button
+          type="button"
+          className={cn(
+            "flex flex-col items-center gap-1 py-2 text-[11px]",
+            moreOpen ? "text-primary font-medium" : "text-muted-foreground",
+          )}
+          onClick={() => setMoreOpen(true)}
+        >
+          <Menu className="size-4" />
+          More
+        </button>
       </nav>
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+        <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto pb-8 md:hidden">
+          <SheetHeader>
+            <SheetTitle>Menu</SheetTitle>
+          </SheetHeader>
+          <div className="grid gap-4 px-4 pb-4">
+            {GROUPS.map((g) => {
+              const items = g.items.filter((n) => !n.permission || canRole(user.role, n.permission));
+              if (!items.length) return null;
+              return (
+                <div key={g.title}>
+                  <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{g.title}</p>
+                  <nav className="grid grid-cols-2 gap-1">
+                    {items.map((n) => {
+                      const Icon = n.icon;
+                      const active = path === n.href || (n.href !== "/dashboard" && path.startsWith(n.href));
+                      return (
+                        <Link
+                          key={n.href}
+                          href={n.href}
+                          onClick={() => setMoreOpen(false)}
+                          className={cn(
+                            "flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm",
+                            active ? "bg-primary text-primary-foreground" : "bg-muted/60 text-foreground",
+                          )}
+                        >
+                          <Icon className="size-4 shrink-0" />
+                          {n.label}
+                        </Link>
+                      );
+                    })}
+                  </nav>
+                </div>
+              );
+            })}
+          </div>
+        </SheetContent>
+      </Sheet>
       <Separator className="sr-only" />
     </div>
   );

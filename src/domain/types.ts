@@ -364,6 +364,7 @@ export interface AppState {
   invoiceCounters: InvoiceCounter[];
   conflicts: ConflictRecord[];
   lastSyncedAt: string | null;
+  lastPulledAt: string | null;
   currentUserId: string | null;
   currentDeviceId: string;
   online: boolean;

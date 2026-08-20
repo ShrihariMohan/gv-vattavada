@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { createSeedState } from "./seed";
 import { AppService, MemorySupabaseAdapter } from "./service";
 import { backupCsvFiles, backupToJson, parseBackupJson } from "./backup";
+import { normalizeState } from "@/db/persist";
+import { isListedOrder } from "@/domain/bill";
 import { productMatchesQuery, productMatchesSelectedTag, publicMenuItems } from "@/marketing/menu";
-import { syncQueueDependencyOrder } from "./rules";
-import type { SyncQueueItem } from "./types";
 
 function svc(iso = "2026-08-19T16:00:00.000Z") {
   const s = new AppService(createSeedState(), () => new Date(iso));
@@ -48,21 +48,33 @@ describe("order guest / phone / room", () => {
 });
 
 describe("order delete", () => {
-  it("cancels and soft-deletes an open order and queues item deletes first", () => {
+  it("cancels and soft-deletes an open order locally without syncing each line", () => {
     const s = svc();
     const order = s.startOrder({ business_id: "biz-rest", table_id: "table-4" });
     s.addOrderItem(order.id, "p-tea", 2);
+    expect(s.state.syncQueue.some((q) => q.entity_type === "order" || q.entity_type === "order_item")).toBe(false);
     s.deleteOrder(order.id);
     const gone = s.state.orders.find((o) => o.id === order.id)!;
     expect(gone.status).toBe("CANCELLED");
     expect(gone.deleted_at).toBeTruthy();
     expect(s.state.tables.find((t) => t.id === "table-4")?.status).toBe("AVAILABLE");
-    const pending = s.state.syncQueue.filter((q) => q.entity_id === order.id || q.payload.includes(order.id));
-    const ordered = syncQueueDependencyOrder(
-      s.state.syncQueue.filter((q) => q.operation === "DELETE") as SyncQueueItem[],
-    );
-    const types = ordered.map((q) => q.entity_type);
-    expect(types.indexOf("order_item")).toBeLessThan(types.indexOf("order"));
+    expect(s.state.syncQueue.some((q) => q.entity_id === order.id)).toBe(false);
+  });
+
+  it("queues a bill for sync once and hides empty tickets from the order list", () => {
+    const s = svc();
+    const empty = s.startOrder({ business_id: "biz-rest" });
+    expect(isListedOrder(s.state, empty)).toBe(false);
+    const order = s.startOrder({ business_id: "biz-rest" });
+    s.addOrderItem(order.id, "p-tea", 1);
+    expect(isListedOrder(s.state, order)).toBe(true);
+    expect(s.state.syncQueue.filter((q) => q.entity_type === "invoice")).toHaveLength(0);
+    s.generateBill({
+      orderId: order.id,
+      payments: [{ method: "CASH", amount_paise: s.orderTotals(order.id).total_paise }],
+    });
+    expect(s.state.syncQueue.some((q) => q.entity_type === "invoice")).toBe(true);
+    expect(s.state.syncQueue.some((q) => q.entity_type === "payment")).toBe(true);
   });
 
   it("refuses to delete a billed order", () => {
@@ -221,6 +233,45 @@ describe("menu tags and visibility", () => {
     const items = publicMenuItems(s.state.products, restaurant.id);
     expect(items.find((p) => p.id === "p-dosa")).toBeUndefined();
     expect(items.find((p) => p.id === "p-idly")).toBeTruthy();
+  });
+});
+
+describe("cross-device sync ids", () => {
+  it("remints duplicate sequential order ids in local state", () => {
+    const state = createSeedState("DEVICE-RESTAURANT-TABLET-01");
+    const clone = structuredClone(state.orders[0]);
+    clone.updated_at = "2026-08-19T18:00:00.000Z";
+    clone.guest_name = "Second colliding ticket";
+    clone.id = "rec-1-DEVICE-RESTAURANT-TABLET-01";
+    state.orders[0].id = "rec-1-DEVICE-RESTAURANT-TABLET-01";
+    state.orders[0].updated_at = "2026-08-19T17:00:00.000Z";
+    state.orders.push(clone);
+    const next = normalizeState(state);
+    const ids = next.orders.map((o) => o.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.filter((id) => id === "rec-1-DEVICE-RESTAURANT-TABLET-01").length).toBe(1);
+  });
+  it("does not reuse sequential ids across devices and pulls remote orders", async () => {
+    const cloud = new MemorySupabaseAdapter();
+    const a = new AppService(createSeedState("dev-aaa-aaaaaaaa"), () => new Date("2026-08-19T16:00:00.000Z"));
+    const b = new AppService(createSeedState("dev-bbb-bbbbbbbb"), () => new Date("2026-08-19T16:00:00.000Z"));
+    a.login("admin", "admin123");
+    b.login("admin", "admin123");
+    const o1 = a.startOrder({ business_id: "biz-rest" });
+    a.addOrderItem(o1.id, "p-tea", 2);
+    const o2 = b.startOrder({ business_id: "biz-rest" });
+    expect(o1.id).not.toBe(o2.id);
+    expect(o1.id).not.toBe("rec-1-DEVICE-RESTAURANT-TABLET-01");
+    const bill = a.generateBill({
+      orderId: o1.id,
+      payments: [{ method: "CASH", amount_paise: a.orderTotals(o1.id).total_paise }],
+    });
+    await a.processSyncQueue(cloud);
+    const pulled = await b.pullFromRemote(cloud);
+    expect(pulled).toBeGreaterThan(0);
+    expect(b.state.invoices.some((i) => i.id === bill.id)).toBe(true);
+    expect(b.state.orders.some((o) => o.id === o1.id)).toBe(true);
+    expect(b.state.orderItems.some((i) => i.order_id === o1.id && i.product_id === "p-tea" && i.qty === 2)).toBe(true);
   });
 });
 

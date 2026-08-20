@@ -79,7 +79,7 @@ describe("R15 invoice numbers", () => {
       orderId: order.id,
       payments: [{ method: "CASH", amount_paise: s.orderTotals(order.id).total_paise }],
     });
-    expect(bill.id.startsWith("rec-")).toBe(true);
+    expect(bill.id.startsWith("rec_")).toBe(true);
     expect(bill.invoice_number).toMatch(/^RES-2026-\d{6}$/);
     expect(bill.sync_status).toBe("PENDING");
   });

@@ -116,3 +116,18 @@ export function billFromOrder(state: AppState, orderId: string, discountPaise = 
 export function invoiceForOrder(state: AppState, orderId: string) {
   return state.invoices.find((i) => i.order_id === orderId && !i.deleted_at) ?? null;
 }
+
+export function orderChargePaise(state: AppState, orderId: string): number {
+  const items = state.orderItems.filter((i) => i.order_id === orderId && !i.deleted_at);
+  return computeInvoiceSnapshot(
+    items.map((i) => ({ qty: i.qty, unit_price_paise: i.unit_price_paise, tax_bps: i.tax_bps })),
+    0,
+    0,
+  ).total_paise;
+}
+
+/** Open tickets and billed sales with a real total. Empty POS taps stay off the list. */
+export function isListedOrder(state: AppState, order: { id: string; deleted_at: string | null; status: string }): boolean {
+  if (order.deleted_at || order.status === "CANCELLED") return false;
+  return orderChargePaise(state, order.id) > 0;
+}

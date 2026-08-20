@@ -1,5 +1,6 @@
 import Dexie, { type Table } from "dexie";
 import { createSeedState } from "@/domain/seed";
+import { newEntityId } from "@/domain/service";
 import type { AppState, Role } from "@/domain/types";
 
 class LocalDb extends Dexie {
@@ -91,7 +92,46 @@ export function normalizeState(state: AppState): AppState {
   for (const u of extraUsers) {
     if (!state.users.some((x) => x.username === u.username)) state.users.push(u);
   }
+  state.lastPulledAt ??= null;
+  remintDuplicateIds(state);
   return state;
+}
+
+/** Old sequential ids (`rec-1-DEVICE-…`) collided after reload; keep one row per id. */
+function remintDuplicateIds(state: AppState) {
+  const device = state.currentDeviceId || "dev";
+  keepNewestAndRemint(state.orders, "ord", device);
+  keepNewestAndRemint(state.orderItems, "oi", device);
+  keepNewestAndRemint(state.invoices, "inv", device);
+  keepNewestAndRemint(state.invoiceItems, "ii", device);
+  keepNewestAndRemint(state.payments, "pay", device);
+  keepNewestAndRemint(state.customers, "cust", device);
+  keepNewestAndRemint(state.bookings, "bk", device);
+}
+
+function keepNewestAndRemint<T extends { id: string; updated_at?: string; created_at?: string }>(
+  rows: T[],
+  prefix: string,
+  deviceId: string,
+) {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const list = groups.get(row.id) ?? [];
+    list.push(row);
+    groups.set(row.id, list);
+  }
+  for (const [, group] of groups) {
+    if (group.length < 2) continue;
+    const ranked = group.slice().sort((a, b) => {
+      const ta = a.updated_at || a.created_at || "";
+      const tb = b.updated_at || b.created_at || "";
+      return tb.localeCompare(ta);
+    });
+    ranked.forEach((row, i) => {
+      if (i === 0) return;
+      row.id = newEntityId(prefix, deviceId);
+    });
+  }
 }
 
 export async function saveState(state: AppState): Promise<void> {

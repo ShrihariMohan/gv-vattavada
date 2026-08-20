@@ -86,11 +86,22 @@ export function emptyState(deviceId: string): AppState {
     invoiceCounters: [],
     conflicts: [],
     lastSyncedAt: null,
+    lastPulledAt: null,
     currentUserId: null,
     currentDeviceId: deviceId,
     online: true,
   };
 }
+
+export function newEntityId(prefix: string, deviceId = "dev"): string {
+  const rand =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}-${++idFallback}`;
+  return `${prefix}_${deviceId.slice(0, 8)}_${rand}`;
+}
+
+let idFallback = 0;
 
 export class AppService {
   state: AppState;
@@ -108,7 +119,7 @@ export class AppService {
 
   private id(prefix = "id") {
     this.seq += 1;
-    return `${prefix}-${this.seq}-${this.state.currentDeviceId}`;
+    return newEntityId(prefix, this.state.currentDeviceId);
   }
 
   private requireUser(): User {
@@ -293,7 +304,6 @@ export class AppService {
         table.sync_status = "PENDING";
       }
     }
-    this.enqueue("order", order.id, "CREATE", order);
     return order;
   }
 
@@ -333,7 +343,6 @@ export class AppService {
     order.updated_at = this.now();
     order.version += 1;
     order.sync_status = "PENDING";
-    this.enqueue("order", order.id, "UPDATE", order);
     return order;
   }
 
@@ -360,9 +369,7 @@ export class AppService {
     for (const item of this.state.orderItems.filter((i) => i.order_id === orderId && !i.deleted_at)) {
       item.deleted_at = this.now();
       item.sync_status = "PENDING";
-      this.enqueue("order_item", item.id, "DELETE", item);
     }
-    this.enqueue("order", cancelled.id, "DELETE", cancelled);
     this.audit("order.delete", "order", cancelled.id, old, { deleted_at: cancelled.deleted_at });
     return cancelled;
   }
@@ -470,7 +477,6 @@ export class AppService {
       existing.updated_at = this.now();
       existing.version += 1;
       existing.sync_status = "PENDING";
-      this.enqueue("order_item", existing.id, "UPDATE", existing);
       return existing;
     }
     const item: OrderItem = {
@@ -483,7 +489,6 @@ export class AppService {
       tax_bps: product.tax_bps,
     };
     this.state.orderItems.push(item);
-    this.enqueue("order_item", item.id, "CREATE", item);
     if (order.status === "OPEN") this.transitionOrder(orderId, "IN_PROGRESS");
     return item;
   }
@@ -495,13 +500,11 @@ export class AppService {
     if (qty <= 0) {
       item.deleted_at = this.now();
       item.sync_status = "PENDING";
-      this.enqueue("order_item", item.id, "DELETE", item);
       return item;
     }
     item.qty = qty;
     item.updated_at = this.now();
     item.sync_status = "PENDING";
-    this.enqueue("order_item", item.id, "UPDATE", item);
     return item;
   }
 
@@ -512,7 +515,6 @@ export class AppService {
     order.status = to;
     order.updated_at = this.now();
     order.sync_status = "PENDING";
-    this.enqueue("order", order.id, "UPDATE", order);
     this.audit("order.status", "order", order.id, old, to);
     if (to === "CANCELLED" && order.table_id) this.releaseTable(order.table_id);
     return order;
@@ -623,6 +625,8 @@ export class AppService {
       advance(false);
     }
     this.audit("invoice.create", "invoice", invoice.id, null, invoice);
+    this.enqueue("order", order.id, "UPDATE", this.mustOrder(order.id));
+    for (const line of items) this.enqueue("order_item", line.id, "UPDATE", line);
     return invoice;
   }
 
@@ -1132,6 +1136,76 @@ export class AppService {
     };
   }
 
+  private collectionFor(type: EntityType): { id: string }[] | null {
+    const collections: Record<EntityType, { id: string }[]> = {
+      business: this.state.businesses,
+      customer: this.state.customers,
+      product: this.state.products,
+      invoice: this.state.invoices,
+      invoice_item: this.state.invoiceItems,
+      payment: this.state.payments,
+      booking: this.state.bookings,
+      expense: this.state.expenses,
+      order: this.state.orders,
+      order_item: this.state.orderItems,
+      room: this.state.rooms,
+      table: this.state.tables,
+      shift: this.state.shifts,
+      daily_closing: this.state.dailyClosings,
+      user: this.state.users,
+    };
+    return collections[type] ?? null;
+  }
+
+  applyRemoteRecords(records: RemoteSyncRecord[]): number {
+    let applied = 0;
+    const pending = new Set(
+      this.state.syncQueue.filter((q) => !q.synced_at).map((q) => `${q.entity_type}:${q.entity_id}`),
+    );
+    let latest = this.state.lastPulledAt;
+    for (const rec of records) {
+      if (rec.updated_at && (!latest || rec.updated_at > latest)) latest = rec.updated_at;
+      if (pending.has(`${rec.entity_type}:${rec.entity_id}`)) continue;
+      if (rec.entity_type === "user") continue;
+      const col = this.collectionFor(rec.entity_type);
+      if (!col) continue;
+      let payload: Record<string, unknown> | null = null;
+      if (rec.payload && typeof rec.payload === "object" && !Array.isArray(rec.payload)) {
+        payload = rec.payload as Record<string, unknown>;
+      } else if (typeof rec.payload === "string") {
+        try {
+          payload = JSON.parse(rec.payload) as Record<string, unknown>;
+        } catch {
+          payload = null;
+        }
+      }
+      if (rec.operation === "DELETE") {
+        const row = col.find((x) => x.id === rec.entity_id) as { deleted_at?: string | null; sync_status?: string } | undefined;
+        if (row) {
+          row.deleted_at = (payload?.deleted_at as string | undefined) ?? this.now();
+          row.sync_status = "SYNCED";
+          applied += 1;
+        }
+        continue;
+      }
+      if (!payload || typeof payload.id !== "string") continue;
+      const idx = col.findIndex((x) => x.id === payload!.id);
+      const next = { ...payload, sync_status: "SYNCED" } as unknown as { id: string };
+      if (idx >= 0) col[idx] = { ...col[idx], ...next };
+      else col.push(next);
+      applied += 1;
+    }
+    this.state.lastPulledAt = latest ?? this.now();
+    this.state.lastSyncedAt = this.now();
+    return applied;
+  }
+
+  async pullFromRemote(adapter: SyncAdapter): Promise<number> {
+    if (!adapter.pull) return 0;
+    const records = await adapter.pull(this.state.lastPulledAt);
+    return this.applyRemoteRecords(records);
+  }
+
   async processSyncQueue(adapter: SyncAdapter) {
     const ordered = syncQueueDependencyOrder(this.state.syncQueue.filter((q) => !q.synced_at && q.status !== "Failed"));
     const results: { id: string; ok: boolean; error?: string }[] = [];
@@ -1272,6 +1346,14 @@ export class AppService {
   }
 }
 
+export interface RemoteSyncRecord {
+  entity_type: EntityType;
+  entity_id: string;
+  operation: string;
+  payload: unknown;
+  updated_at?: string;
+}
+
 export interface SyncPushResult {
   server_id?: string;
   conflict?: boolean;
@@ -1280,10 +1362,11 @@ export interface SyncPushResult {
 
 export interface SyncAdapter {
   push(item: SyncQueueItem): SyncPushResult | Promise<SyncPushResult>;
+  pull?(since: string | null): RemoteSyncRecord[] | Promise<RemoteSyncRecord[]>;
 }
 
 export class MemorySupabaseAdapter implements SyncAdapter {
-  server = new Map<string, { payload: string; server_id: string }>();
+  server = new Map<string, RemoteSyncRecord>();
   failNext = false;
   conflictNext = false;
   push(item: SyncQueueItem) {
@@ -1296,8 +1379,23 @@ export class MemorySupabaseAdapter implements SyncAdapter {
       return { conflict: true, remote_payload: '{"edited":true}' };
     }
     const server_id = `srv-${item.entity_id}`;
-    this.server.set(item.entity_id, { payload: item.payload, server_id });
+    let payload: unknown = item.payload;
+    try {
+      payload = JSON.parse(item.payload);
+    } catch {
+      payload = item.payload;
+    }
+    this.server.set(`${item.entity_type}:${item.entity_id}`, {
+      entity_type: item.entity_type,
+      entity_id: item.entity_id,
+      operation: item.operation,
+      payload,
+      updated_at: new Date().toISOString(),
+    });
     return { server_id };
+  }
+  pull(since: string | null) {
+    return [...this.server.values()].filter((r) => !since || (r.updated_at && r.updated_at > since));
   }
 }
 
@@ -1316,11 +1414,21 @@ export class HttpSyncAdapter implements SyncAdapter {
     if (row?.status === "CONFLICT") {
       return { conflict: true, remote_payload: row.remote_payload ?? "" };
     }
+    if (row?.status === "FAILED") throw new Error(row.remote_payload || "sync failed");
     return { server_id: row?.server_id ?? `srv-${item.entity_id}` };
+  }
+
+  async pull(since: string | null): Promise<RemoteSyncRecord[]> {
+    const url = since ? `/api/sync?since=${encodeURIComponent(since)}` : "/api/sync";
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`sync pull http ${res.status}`);
+    const data = (await res.json()) as { records?: RemoteSyncRecord[] };
+    return data.records ?? [];
   }
 }
 
 export function createDefaultSyncAdapter(): SyncAdapter {
+  if (typeof window !== "undefined") return new HttpSyncAdapter();
   if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_SYNC_ENABLED === "true") {
     return new HttpSyncAdapter();
   }

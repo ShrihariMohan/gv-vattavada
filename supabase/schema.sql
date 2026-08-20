@@ -11,6 +11,8 @@ create table if not exists public.sync_records (
   primary key (entity_type, entity_id)
 );
 
+create index if not exists sync_records_updated_at on public.sync_records (updated_at);
+
 create table if not exists public.businesses (
   id text primary key,
   code text unique not null,

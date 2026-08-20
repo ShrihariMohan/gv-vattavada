@@ -4,7 +4,7 @@ import { Screen } from "@/ui/Screen";
 import { Money } from "@/ui/Shell";
 import { useApp } from "@/ui/AppProvider";
 import { StatusBadge } from "@/ui/status-badge";
-import { billFromOrder, invoiceForOrder } from "@/domain/bill";
+import { billFromOrder, invoiceForOrder, isListedOrder } from "@/domain/bill";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -30,7 +30,10 @@ export default function OrdersPage() {
   const { service, refresh } = useApp();
   const router = useRouter();
   const restaurant = service.state.businesses.find((b) => b.type === "RESTAURANT")!;
-  const orders = service.state.orders.filter((o) => o.business_id === restaurant.id && !o.deleted_at).slice().reverse();
+  const orders = service.state.orders
+    .filter((o) => o.business_id === restaurant.id && isListedOrder(service.state, o))
+    .slice()
+    .reverse();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [view, setView] = useState<Order | null>(null);
   const bill = useMemo(() => (view ? billFromOrder(service.state, view.id) : null), [view, service.state]);
@@ -55,12 +58,12 @@ export default function OrdersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {orders.map((o) => {
+            {orders.map((o, idx) => {
               const t = service.orderTotals(o.id);
               const table = service.state.tables.find((x) => x.id === o.table_id);
               const billed = invoiceForOrder(service.state, o.id);
               return (
-                <TableRow key={o.id}>
+                <TableRow key={`${o.id}-${idx}`}>
                   <TableCell>{o.guest_name || "Walk-in"}</TableCell>
                   <TableCell className="tabular-nums">{o.guest_phone || "—"}</TableCell>
                   <TableCell>{o.room_number || "—"}</TableCell>
