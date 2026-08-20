@@ -1,5 +1,6 @@
 import Dexie, { type Table } from "dexie";
-import type { AppState } from "@/domain/types";
+import { createSeedState } from "@/domain/seed";
+import type { AppState, Role } from "@/domain/types";
 
 class LocalDb extends Dexie {
   snapshots!: Table<{ id: string; state: AppState }>;
@@ -34,6 +35,27 @@ export function normalizeState(state: AppState): AppState {
       b.name = next.name;
       b.email = next.email;
     }
+  }
+  for (const c of state.dailyClosings) {
+    c.status ??= "CLOSED";
+    c.reopened_at ??= null;
+    c.reopen_reason ??= "";
+  }
+  const known: Role[] = [
+    "ADMIN",
+    "MANAGER",
+    "STAFF",
+    "RESTAURANT_MANAGER",
+    "RESTAURANT_STAFF",
+    "STAY_MANAGER",
+    "STAY_STAFF",
+  ];
+  for (const u of state.users) {
+    if (!known.includes(u.role)) u.role = "STAFF";
+  }
+  const extraUsers = createSeedState(state.currentDeviceId).users;
+  for (const u of extraUsers) {
+    if (!state.users.some((x) => x.username === u.username)) state.users.push(u);
   }
   return state;
 }

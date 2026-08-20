@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import type { DailyClosing } from "@/domain/types";
 
@@ -25,7 +26,7 @@ export default function ClosingPage() {
   const rows = service.state.dailyClosings.filter((c) => c.business_id === restaurant.id).slice().reverse();
 
   return (
-    <Screen title="Daily closing" description="Count the till. After close, sales that day are locked unless you use an explicit correction.">
+    <Screen title="Daily closing" description="Count the till. Close locks new bills. Re-open the day to take more sales without deleting the closing history.">
       <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
         <Card>
           <CardHeader>
@@ -67,6 +68,7 @@ export default function ClosingPage() {
                 <TableHead>Expected</TableHead>
                 <TableHead>Actual</TableHead>
                 <TableHead>Diff</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -86,17 +88,41 @@ export default function ClosingPage() {
                   <TableCell>
                     <Money paise={c.difference_paise} />
                   </TableCell>
+                  <TableCell>
+                    <Badge variant={(c.status ?? "CLOSED") === "REOPENED" ? "secondary" : "default"}>
+                      {c.status ?? "CLOSED"}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setEdit(c);
-                        setEditRupees(String(c.actual_cash_paise / 100));
-                      }}
-                    >
-                      Edit
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      {(c.status ?? "CLOSED") === "CLOSED" && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            try {
+                              service.reopenDay(c.id, "Manager reopened the day");
+                              toast.success("Day reopened", { description: "New bills are allowed again" });
+                              refresh();
+                            } catch (e) {
+                              toast.error(e instanceof Error ? e.message : "Re-open failed");
+                            }
+                          }}
+                        >
+                          Re-open day
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEdit(c);
+                          setEditRupees(String(c.actual_cash_paise / 100));
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

@@ -1,5 +1,12 @@
 export type BusinessType = "STAY" | "RESTAURANT";
-export type Role = "ADMIN" | "MANAGER" | "STAFF";
+export type Role =
+  | "ADMIN"
+  | "MANAGER"
+  | "STAFF"
+  | "RESTAURANT_MANAGER"
+  | "RESTAURANT_STAFF"
+  | "STAY_MANAGER"
+  | "STAY_STAFF";
 export type SyncStatus =
   | "PENDING"
   | "SYNCING"
@@ -270,6 +277,9 @@ export interface DailyClosing extends SyncMeta {
   actual_cash_paise: number;
   difference_paise: number;
   closed_by: string;
+  status: "CLOSED" | "REOPENED";
+  reopened_at: string | null;
+  reopen_reason: string;
 }
 
 export interface Shift extends SyncMeta {

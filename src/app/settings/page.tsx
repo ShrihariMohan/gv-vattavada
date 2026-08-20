@@ -1,15 +1,24 @@
 "use client";
 import { Screen } from "@/ui/Screen";
 import { useApp } from "@/ui/AppProvider";
-import { MemorySupabaseAdapter } from "@/domain/service";
-import { useRef, useState } from "react";
+import { reregisterAppServiceWorker, serviceWorkerStatus, unregisterAppServiceWorker } from "@/pwa/service-worker";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 
 export default function SettingsPage() {
-  const { service, refresh, user } = useApp();
-  const adapter = useRef(new MemorySupabaseAdapter());
+  const { service, refresh, user, syncAdapter } = useApp();
+  const [sw, setSw] = useState({ registered: false, disabled: false });
+
+  const loadSw = async () => {
+    setSw(await serviceWorkerStatus());
+  };
+
+  useEffect(() => {
+    void loadSw();
+  }, []);
+
   return (
     <Screen title="Settings">
       <div className="grid max-w-xl gap-4">
@@ -26,18 +35,50 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Sync</CardTitle>
-            <CardDescription>{service.pendingCount()} change(s) waiting.</CardDescription>
+            <CardDescription>{service.pendingCount()} change(s) waiting. Cloud ingest is /api/sync when enabled.</CardDescription>
           </CardHeader>
           <CardContent>
             <Button
-              onClick={() => {
+              onClick={async () => {
                 service.setOnline(true);
-                const r = service.processSyncQueue(adapter.current);
+                const r = await service.processSyncQueue(syncAdapter);
                 toast.success(`${r.filter((x) => x.ok).length} synced`);
                 refresh();
               }}
             >
               Sync now
+            </Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Service worker</CardTitle>
+            <CardDescription>
+              Cached pages must not trap old JavaScript after a schema or app update. Unregister clears caches only — Dexie data stays on this device.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-2">
+            <p className="w-full text-sm text-muted-foreground">
+              {sw.disabled ? "Disabled (will not auto-register)" : sw.registered ? "Registered (vbm-shell-v3)" : "Not registered"}
+            </p>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                await unregisterAppServiceWorker();
+                await loadSw();
+                toast.success("Service worker unregistered", { description: "Caches cleared. Local database kept." });
+              }}
+            >
+              Unregister
+            </Button>
+            <Button
+              onClick={async () => {
+                await reregisterAppServiceWorker();
+                await loadSw();
+                toast.success("Service worker re-registered");
+              }}
+            >
+              Re-register
             </Button>
           </CardContent>
         </Card>
@@ -82,7 +123,7 @@ export default function SettingsPage() {
             ))}
           </CardContent>
         </Card>
-        <p className="text-xs text-muted-foreground">PWA: use Install / Add to Home Screen. Background sync is not guaranteed after the app is fully closed.</p>
+        <p className="text-xs text-muted-foreground">PWA: use Install / Add to Home Screen. Background Sync is optional; the app also flushes the queue on open, online, and every 15s.</p>
       </div>
     </Screen>
   );

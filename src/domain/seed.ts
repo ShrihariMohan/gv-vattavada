@@ -78,7 +78,11 @@ export function createSeedState(deviceId = "DEVICE-RESTAURANT-TABLET-01"): AppSt
   state.users = [
     mkUser("user-admin", "admin", "admin123", "Admin", "ADMIN"),
     mkUser("user-manager", "manager", "manager123", "Manager", "MANAGER"),
-    mkUser("user-staff", "staff", "staff123", "Staff", "STAFF"),
+    mkUser("user-staff", "staff", "staff123", "Kitchen staff", "STAFF"),
+    mkUser("user-rm", "kitchen.manager", "kitchen123", "Kitchen manager", "RESTAURANT_MANAGER"),
+    mkUser("user-rs", "kitchen.staff", "kstaff123", "Kitchen floor", "RESTAURANT_STAFF"),
+    mkUser("user-sm", "stay.manager", "stay123", "Stay manager", "STAY_MANAGER"),
+    mkUser("user-ss", "stay.staff", "sstaff123", "Stay desk", "STAY_STAFF"),
   ];
   state.devices = [
     { id: "DEVICE-RESTAURANT-TABLET-01", name: "Restaurant Tablet", created_at: t },

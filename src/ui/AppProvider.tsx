@@ -1,9 +1,10 @@
 "use client";
 
 import { createSeedState } from "@/domain/seed";
-import { AppService, MemorySupabaseAdapter } from "@/domain/service";
+import { AppService, createDefaultSyncAdapter, type SyncAdapter } from "@/domain/service";
 import type { AppState, Role, User } from "@/domain/types";
 import { loadState, saveState } from "@/db/persist";
+import { registerAppServiceWorker } from "@/pwa/service-worker";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type Ctx = {
@@ -14,6 +15,7 @@ type Ctx = {
   login: (u: string, p: string) => void;
   logout: () => void;
   can: (action: Parameters<AppService["require"]>[0]) => boolean;
+  syncAdapter: SyncAdapter;
 };
 
 const AppCtx = createContext<Ctx | null>(null);
@@ -33,12 +35,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [tick, setTick] = useState(0);
   const svc = useRef<AppService | null>(null);
-  const adapter = useRef(new MemorySupabaseAdapter());
+  const adapter = useRef<SyncAdapter>(createDefaultSyncAdapter());
 
   const refresh = useCallback(() => {
     if (svc.current) void saveState(svc.current.state);
     setTick((t) => t + 1);
   }, []);
+
+  const flushQueue = useCallback(async () => {
+    if (!svc.current?.state.online) return;
+    await svc.current.processSyncQueue(adapter.current);
+    refresh();
+  }, [refresh]);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,35 +67,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
+    if (!ready) return;
+    void flushQueue();
+  }, [ready, flushQueue]);
+
+  useEffect(() => {
     const on = () => {
       if (!svc.current) return;
       svc.current.setOnline(true);
-      svc.current.processSyncQueue(adapter.current);
-      refresh();
+      void flushQueue();
     };
     const off = () => {
       svc.current?.setOnline(false);
       refresh();
     };
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === "FLUSH_SYNC") void flushQueue();
+    };
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
+    navigator.serviceWorker?.addEventListener("message", onMessage);
     const t = window.setInterval(() => {
-      if (svc.current?.state.online) {
-        svc.current.processSyncQueue(adapter.current);
-        refresh();
-      }
+      void flushQueue();
     }, 15000);
     return () => {
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
+      navigator.serviceWorker?.removeEventListener("message", onMessage);
       window.clearInterval(t);
     };
-  }, [refresh]);
+  }, [flushQueue, refresh]);
 
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-    }
+    void registerAppServiceWorker();
   }, []);
 
   const value = useMemo(() => {
@@ -116,6 +128,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return false;
         }
       },
+      syncAdapter: adapter.current,
     };
   }, [ready, refresh, tick]);
 

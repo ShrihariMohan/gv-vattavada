@@ -119,7 +119,7 @@ describe("R6 R7 sync engine", () => {
     expect(syncQueueDependencyOrder(items).map((i) => i.entity_type)).toEqual(["invoice", "invoice_item", "payment"]);
   });
 
-  it("syncs queue to adapter and retries failures", () => {
+  it("syncs queue to adapter and retries failures", async () => {
     const s = svc();
     const order = s.startOrder({ business_id: "biz-rest" });
     s.addOrderItem(order.id, "p-tea", 1);
@@ -129,10 +129,10 @@ describe("R6 R7 sync engine", () => {
     });
     const adapter = new MemorySupabaseAdapter();
     adapter.failNext = true;
-    const first = s.processSyncQueue(adapter);
+    const first = await s.processSyncQueue(adapter);
     expect(first.some((r) => !r.ok)).toBe(true);
     s.retryFailed();
-    const second = s.processSyncQueue(adapter);
+    const second = await s.processSyncQueue(adapter);
     expect(second.every((r) => r.ok)).toBe(true);
     expect(s.state.invoices.filter((i) => i.invoice_type === "RESTAURANT" && i.notes !== "seed").every((i) => i.sync_status === "SYNCED")).toBe(true);
   });
@@ -310,6 +310,15 @@ describe("R42-R43 closing and shifts", () => {
         payments: [],
       }),
     ).toThrow(/Day is closed/);
+    s.reopenDay(close.id, "Forgot a table");
+    expect(close.status).toBe("REOPENED");
+    const order = s.startOrder({ business_id: "biz-rest" });
+    s.addOrderItem(order.id, "p-tea", 1);
+    const bill = s.generateBill({
+      orderId: order.id,
+      payments: [{ method: "CASH", amount_paise: s.orderTotals(order.id).total_paise }],
+    });
+    expect(bill.status).toBe("ISSUED");
   });
 });
 
@@ -320,7 +329,11 @@ describe("R44-R46 users audit permissions", () => {
     expect(can("STAFF", "analytics.financial")).toBe(false);
     expect(can("STAFF", "pos.create_bill")).toBe(true);
     expect(can("MANAGER", "reports.view")).toBe(true);
-    expect(can("ADMIN", "users.manage")).toBe(true);
+    expect(can("RESTAURANT_STAFF", "bookings.manage")).toBe(false);
+    expect(can("STAY_STAFF", "pos.use")).toBe(false);
+    expect(can("STAY_MANAGER", "bookings.manage")).toBe(true);
+    expect(can("RESTAURANT_MANAGER", "day.close")).toBe(true);
+    expect(can("STAY_MANAGER", "pos.use")).toBe(false);
     s.logout();
     s.login("staff", "staff123");
     expect(() => s.createExpense({ business_id: "biz-rest", category: "Gas", amount_paise: 1, payment_method: "CASH", description: "x" })).toThrow(/Forbidden/);

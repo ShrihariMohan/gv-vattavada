@@ -344,7 +344,9 @@ export class AppService {
     const invoice = this.state.invoices.find((i) => i.order_id === orderId && i.status === "ISSUED");
     if (invoice) throw new Error("Cannot delete a billed order. Void the invoice first.");
     if (order.status === "PAID") throw new Error("Cannot delete a paid order");
-    if (user.role === "STAFF" && order.status === "COMPLETED") throw new Error("Staff cannot delete completed orders");
+    if ((user.role === "STAFF" || user.role === "RESTAURANT_STAFF" || user.role === "STAY_STAFF") && order.status === "COMPLETED") {
+      throw new Error("Staff cannot delete completed orders");
+    }
     const old = { ...order };
     if (order.status !== "CANCELLED") {
       if (order.status === "HELD") this.transitionOrder(orderId, "OPEN");
@@ -429,6 +431,23 @@ export class AppService {
     closing.sync_status = "PENDING";
     this.enqueue("daily_closing", closing.id, "UPDATE", closing);
     this.audit("daily_closing.update", "daily_closing", closing.id, old, closing);
+    return closing;
+  }
+
+  reopenDay(closingId: string, reason = "Manager reopened the day"): DailyClosing {
+    this.require("day.close");
+    const closing = this.state.dailyClosings.find((c) => c.id === closingId);
+    if (!closing) throw new Error("Closing not found");
+    if ((closing.status ?? "CLOSED") === "REOPENED") throw new Error("Day is already open");
+    const old = { ...closing };
+    closing.status = "REOPENED";
+    closing.reopened_at = this.now();
+    closing.reopen_reason = reason;
+    closing.updated_at = this.now();
+    closing.version += 1;
+    closing.sync_status = "PENDING";
+    this.enqueue("daily_closing", closing.id, "UPDATE", closing);
+    this.audit("daily_closing.reopen", "daily_closing", closing.id, old, closing);
     return closing;
   }
 
@@ -871,6 +890,9 @@ export class AppService {
       actual_cash_paise: actualCashPaise,
       difference_paise: actualCashPaise - cash,
       closed_by: this.requireUser().id,
+      status: "CLOSED",
+      reopened_at: null,
+      reopen_reason: "",
     };
     this.state.dailyClosings.push(closing);
     this.enqueue("daily_closing", closing.id, "CREATE", closing);
@@ -1096,13 +1118,13 @@ export class AppService {
     };
   }
 
-  processSyncQueue(adapter: SyncAdapter) {
+  async processSyncQueue(adapter: SyncAdapter) {
     const ordered = syncQueueDependencyOrder(this.state.syncQueue.filter((q) => !q.synced_at && q.status !== "Failed"));
     const results: { id: string; ok: boolean; error?: string }[] = [];
     for (const item of ordered) {
       item.status = "Syncing";
       try {
-        const remote = adapter.push(item);
+        const remote = await Promise.resolve(adapter.push(item));
         if (remote.conflict) {
           this.state.conflicts.push({
             id: this.id("conflict"),
@@ -1236,8 +1258,14 @@ export class AppService {
   }
 }
 
+export interface SyncPushResult {
+  server_id?: string;
+  conflict?: boolean;
+  remote_payload?: string;
+}
+
 export interface SyncAdapter {
-  push(item: SyncQueueItem): { server_id?: string; conflict?: boolean; remote_payload?: string };
+  push(item: SyncQueueItem): SyncPushResult | Promise<SyncPushResult>;
 }
 
 export class MemorySupabaseAdapter implements SyncAdapter {
@@ -1257,6 +1285,32 @@ export class MemorySupabaseAdapter implements SyncAdapter {
     this.server.set(item.entity_id, { payload: item.payload, server_id });
     return { server_id };
   }
+}
+
+export class HttpSyncAdapter implements SyncAdapter {
+  async push(item: SyncQueueItem): Promise<SyncPushResult> {
+    const res = await fetch("/api/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: [item] }),
+    });
+    if (!res.ok) throw new Error(`sync http ${res.status}`);
+    const data = (await res.json()) as {
+      results?: { entity_id?: string; server_id?: string; status?: string; remote_payload?: string }[];
+    };
+    const row = data.results?.[0];
+    if (row?.status === "CONFLICT") {
+      return { conflict: true, remote_payload: row.remote_payload ?? "" };
+    }
+    return { server_id: row?.server_id ?? `srv-${item.entity_id}` };
+  }
+}
+
+export function createDefaultSyncAdapter(): SyncAdapter {
+  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_SYNC_ENABLED === "true") {
+    return new HttpSyncAdapter();
+  }
+  return new MemorySupabaseAdapter();
 }
 
 export function invoicePrintModel(state: AppState, invoiceId: string) {

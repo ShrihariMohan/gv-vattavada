@@ -115,10 +115,8 @@ export function syncQueueDependencyOrder(items: SyncQueueItem[]): SyncQueueItem[
 
 export function can(role: Role, action: Permission): boolean {
   if (role === "ADMIN") return true;
-  if (role === "MANAGER") {
-    return MANAGER_ACTIONS.has(action);
-  }
-  return STAFF_ACTIONS.has(action);
+  const allowed = ROLE_ACTIONS[role];
+  return allowed.has(action);
 }
 
 export type Permission =
@@ -139,13 +137,14 @@ export type Permission =
   | "conflicts.resolve"
   | "day.close";
 
-const MANAGER_ACTIONS = new Set<Permission>([
-  "pos.use",
-  "pos.create_bill",
-  "products.view",
+const RESTAURANT_STAFF_ACTIONS = new Set<Permission>(["pos.use", "pos.create_bill", "products.view"]);
+
+const STAY_STAFF_ACTIONS = new Set<Permission>(["bookings.manage", "invoices.view"]);
+
+const RESTAURANT_MANAGER_ACTIONS = new Set<Permission>([
+  ...RESTAURANT_STAFF_ACTIONS,
   "products.edit",
   "sales.view",
-  "bookings.manage",
   "expenses.manage",
   "reports.view",
   "invoices.view",
@@ -153,7 +152,27 @@ const MANAGER_ACTIONS = new Set<Permission>([
   "day.close",
 ]);
 
-const STAFF_ACTIONS = new Set<Permission>(["pos.use", "pos.create_bill", "products.view"]);
+const STAY_MANAGER_ACTIONS = new Set<Permission>([
+  ...STAY_STAFF_ACTIONS,
+  "sales.view",
+  "expenses.manage",
+  "reports.view",
+  "analytics.financial",
+]);
+
+const MANAGER_ACTIONS = new Set<Permission>([
+  ...RESTAURANT_MANAGER_ACTIONS,
+  ...STAY_MANAGER_ACTIONS,
+]);
+
+const ROLE_ACTIONS: Record<Exclude<Role, "ADMIN">, Set<Permission>> = {
+  MANAGER: MANAGER_ACTIONS,
+  STAFF: RESTAURANT_STAFF_ACTIONS,
+  RESTAURANT_MANAGER: RESTAURANT_MANAGER_ACTIONS,
+  RESTAURANT_STAFF: RESTAURANT_STAFF_ACTIONS,
+  STAY_MANAGER: STAY_MANAGER_ACTIONS,
+  STAY_STAFF: STAY_STAFF_ACTIONS,
+};
 
 export function financialRecordStatus(action: "void" | "cancel" | "reverse"): "VOIDED" | "CANCELLED" | "REVERSED" {
   if (action === "void") return "VOIDED";
@@ -296,8 +315,18 @@ export const KEYBOARD_SHORTCUTS = {
   Escape: "Cancel",
 } as const;
 
-export function isDayClosed(closings: { business_id: string; business_date: string }[], businessId: string, date: string): boolean {
-  return closings.some((c) => c.business_id === businessId && c.business_date === date);
+export function isDayClosed(
+  closings: { business_id: string; business_date: string; status?: "CLOSED" | "REOPENED"; deleted_at?: string | null }[],
+  businessId: string,
+  date: string,
+): boolean {
+  return closings.some(
+    (c) =>
+      c.business_id === businessId &&
+      c.business_date === date &&
+      (c.status ?? "CLOSED") === "CLOSED" &&
+      !c.deleted_at,
+  );
 }
 
 export function assertMutableFinancial(opts: {

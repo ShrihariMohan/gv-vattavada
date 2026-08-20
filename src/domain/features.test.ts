@@ -102,7 +102,7 @@ describe("products and closing edits", () => {
     ).toThrow(/Forbidden/);
   });
 
-  it("edits a daily closing as a correction and syncs UPDATE after CREATE", () => {
+  it("edits a daily closing as a correction and syncs UPDATE after CREATE", async () => {
     const s = svc();
     const close = s.closeDay("biz-rest", 10000);
     const edited = s.updateDailyClosing(close.id, 12000);
@@ -112,14 +112,47 @@ describe("products and closing edits", () => {
     expect(ops).toEqual(["CREATE", "UPDATE"]);
     const adapter = new MemorySupabaseAdapter();
     s.setOnline(true);
-    const result = s.processSyncQueue(adapter);
+    const result = await s.processSyncQueue(adapter);
     expect(result.every((r) => r.ok)).toBe(true);
     expect(s.state.dailyClosings.find((c) => c.id === close.id)?.sync_status).toBe("SYNCED");
+  });
+
+  it("reopens a closed day and syncs UPDATE", async () => {
+    const s = svc();
+    const close = s.closeDay("biz-rest", 10000);
+    const opened = s.reopenDay(close.id, "Late walk-in");
+    expect(opened.status).toBe("REOPENED");
+    expect(s.state.dailyClosings.find((c) => c.id === close.id)?.status).toBe("REOPENED");
+    const adapter = new MemorySupabaseAdapter();
+    expect((await s.processSyncQueue(adapter)).every((r) => r.ok)).toBe(true);
+  });
+});
+
+describe("R77 stay vs restaurant roles", () => {
+  it("blocks kitchen staff from bookings and stay staff from POS", () => {
+    const s = svc();
+    s.logout();
+    s.login("stay.staff", "sstaff123");
+    expect(() => s.startOrder({ business_id: "biz-rest" })).toThrow(/Forbidden/);
+    s.logout();
+    s.login("kitchen.staff", "kstaff123");
+    expect(() =>
+      s.createBooking({
+        business_id: "biz-stay-a",
+        customer_id: "cust-1",
+        room_id: "r-104",
+        check_in: "2026-08-25",
+        check_out: "2026-08-26",
+        adults: 1,
+        children: 0,
+        rate_paise: 350000,
+      }),
+    ).toThrow(/Forbidden/);
   });
 });
 
 describe("sync edge cases", () => {
-  it("keeps later queue items when an earlier push fails", () => {
+  it("keeps later queue items when an earlier push fails", async () => {
     const s = svc();
     s.createProduct({
       business_id: "biz-rest",
@@ -130,14 +163,14 @@ describe("sync edge cases", () => {
     });
     const adapter = new MemorySupabaseAdapter();
     adapter.failNext = true;
-    const first = s.processSyncQueue(adapter);
+    const first = await s.processSyncQueue(adapter);
     expect(first.some((r) => !r.ok)).toBe(true);
     expect(s.state.products.find((p) => p.name === "Buttermilk")?.sync_status).toBe("FAILED");
     s.retryFailed();
-    expect(s.processSyncQueue(adapter).every((r) => r.ok)).toBe(true);
+    expect((await s.processSyncQueue(adapter)).every((r) => r.ok)).toBe(true);
   });
 
-  it("records a conflict instead of overwriting financial records", () => {
+  it("records a conflict instead of overwriting financial records", async () => {
     const s = svc();
     const order = s.startOrder({ business_id: "biz-rest" });
     s.addOrderItem(order.id, "p-tea", 1);
@@ -147,7 +180,7 @@ describe("sync edge cases", () => {
     });
     const adapter = new MemorySupabaseAdapter();
     adapter.conflictNext = true;
-    const result = s.processSyncQueue(adapter);
+    const result = await s.processSyncQueue(adapter);
     expect(result.some((r) => r.error === "CONFLICT")).toBe(true);
     expect(s.state.conflicts.length).toBeGreaterThan(0);
   });

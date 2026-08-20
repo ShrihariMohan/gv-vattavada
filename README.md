@@ -11,9 +11,17 @@ npm test
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Sign in with `admin` / `admin123` (also `manager` / `manager123`, `staff` / `staff123`).
+Open [http://localhost:3000](http://localhost:3000). Staff login: `admin` / `admin123`. Also `manager`, `staff` (restaurant), `kitchen.manager` / `kitchen123`, `kitchen.staff` / `kstaff123`, `stay.manager` / `stay123`, `stay.staff` / `sstaff123`.
 
-Install as a PWA from the browser (Add to Home Screen).
+Install as a PWA from the browser (Add to Home Screen). Public pages and the staff shell stay available offline after a first visit. After an app update, use **Settings → Unregister / Re-register** if a stale service worker is serving old JS (IndexedDB is not cleared).
+
+## Supabase (background sync)
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. Copy `.env.example` to `.env.local` and fill `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` (server only).
+3. In the SQL editor run `supabase/schema.sql`, then `supabase/seed.sql`.
+4. Set `NEXT_PUBLIC_SYNC_ENABLED=true` and restart `npm run dev`.
+5. The Dexie queue posts to `/api/sync` on open, reconnect, every 15s, Sync now, and (where supported) Background Sync. POS still works with no network.
 
 ## Architecture
 

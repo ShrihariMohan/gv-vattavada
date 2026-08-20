@@ -12,7 +12,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 const PRESETS = ["Today", "Yesterday", "This Week", "This Month", "Last Month", "This Year", "Custom"] as const;
 
 export default function ReportsPage() {
-  const { service, user } = useApp();
+  const { service, can } = useApp();
   const [preset, setPreset] = useState<(typeof PRESETS)[number]>("This Month");
   const [from, setFrom] = useState("2026-08-01");
   const [to, setTo] = useState("2026-08-19");
@@ -26,8 +26,8 @@ export default function ReportsPage() {
     () => Object.entries(a.byDate).map(([date, v]) => ({ date: date.slice(5), revenue: v / 100 })),
     [a],
   );
-  if (user?.role === "STAFF") {
-    return <Screen title="Reports"><p>Financial analytics are not available for staff.</p></Screen>;
+  if (!can("analytics.financial")) {
+    return <Screen title="Reports"><p>Financial analytics are not available for this role.</p></Screen>;
   }
   return (
     <Screen
