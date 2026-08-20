@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { PublicSite } from "@/marketing/sites";
-import { PhotoSlotCard } from "@/marketing/photo-slot";
+import { GlennGallery, SiteMediaCard } from "@/marketing/site-media";
+import { telHref, waHref } from "@/marketing/media";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +16,8 @@ export function SitePage({ site }: { site: PublicSite }) {
   const rental = site.tone === "rental";
   const kitchen = site.tone === "kitchen";
   const glenn = site.tone === "glenn";
+  const stills = site.gallery.filter((g) => g.kind === "image");
+  const videos = site.gallery.filter((g) => g.kind === "video");
 
   return (
     <article className={cn("mx-auto max-w-6xl px-4 py-10 md:py-16", TONE[site.tone])}>
@@ -22,20 +25,28 @@ export function SitePage({ site }: { site: PublicSite }) {
       {glenn ? (
         <>
           <div className="mt-6 grid gap-2 md:grid-cols-3">
-            {site.gallery.slice(0, 3).map((slot) => (
-              <PhotoSlotCard key={slot.label} slot={slot} />
+            {stills.slice(0, 3).map((item) => (
+              <SiteMediaCard key={item.src} item={item} priority />
             ))}
           </div>
           <h1 className="mt-10 max-w-3xl font-heading text-4xl leading-[1.05] tracking-tight md:text-6xl">{site.tagline}</h1>
           <p className="mt-5 max-w-2xl text-lg text-muted-foreground">{site.description}</p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <a href="#enquire" className={buttonVariants({ size: "lg" })}>
+              {site.heroCta}
+            </a>
+            <a href="#gallery" className={buttonVariants({ variant: "outline", size: "lg" })}>
+              Open gallery
+            </a>
+          </div>
         </>
       ) : (
-        <div className={cn("mt-6 grid items-end gap-10", rental ? "lg:grid-cols-[1fr]" : "lg:grid-cols-[1.1fr_0.9fr]")}>
+        <div className={cn("mt-6 grid items-end gap-10", rental || !site.hero ? "lg:grid-cols-[1fr]" : "lg:grid-cols-[1.1fr_0.9fr]")}>
           <div>
             <h1 className="font-heading text-4xl leading-[1.05] tracking-tight md:text-6xl">{site.tagline}</h1>
             <p className="mt-5 max-w-xl text-lg text-muted-foreground">{site.description}</p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <a href="#enquire" className={buttonVariants({ size: "lg" })}>
+              <a href={kitchen ? "/menu" : "#enquire"} className={buttonVariants({ size: "lg" })}>
                 {site.heroCta}
               </a>
               <Link href="/" className={buttonVariants({ variant: "outline", size: "lg" })}>
@@ -43,7 +54,7 @@ export function SitePage({ site }: { site: PublicSite }) {
               </Link>
             </div>
           </div>
-          {!rental && <PhotoSlotCard slot={site.gallery[0]} />}
+          {site.hero && <SiteMediaCard item={site.hero} priority className="min-h-64" />}
         </div>
       )}
 
@@ -58,7 +69,7 @@ export function SitePage({ site }: { site: PublicSite }) {
 
       {kitchen ? (
         <section className="mt-16">
-          <h2 className="font-heading text-3xl">Menu (placeholder)</h2>
+          <h2 className="font-heading text-3xl">Menu</h2>
           <div className="mt-6 divide-y rounded-2xl border bg-card">
             {site.offerings.map((o) => (
               <div key={o.title} className="flex items-baseline justify-between gap-4 px-5 py-4">
@@ -73,11 +84,11 @@ export function SitePage({ site }: { site: PublicSite }) {
         </section>
       ) : (
         <section className="mt-16">
-          <h2 className="font-heading text-3xl">{rental ? "Fleet (placeholder)" : "Stay options (placeholder)"}</h2>
+          <h2 className="font-heading text-3xl">{rental ? "Fleet" : "Stay options"}</h2>
           <div className="mt-6 grid gap-4 md:grid-cols-3">
-            {site.offerings.map((o) => (
+            {site.offerings.map((o, i) => (
               <div key={o.title} className="rounded-2xl border bg-card p-5">
-                <PhotoSlotCard slot={{ label: o.title, hint: "Card photo", className: "min-h-36 mb-4" }} />
+                {stills[i + 1] && <SiteMediaCard item={stills[i + 1]} className="mb-4 min-h-36" />}
                 <p className="font-medium">{o.title}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{o.detail}</p>
                 <p className="mt-3 text-sm tabular-nums">{o.price}</p>
@@ -87,14 +98,27 @@ export function SitePage({ site }: { site: PublicSite }) {
         </section>
       )}
 
-      <section className="mt-16">
-        <h2 className="font-heading text-3xl">Gallery placeholders</h2>
-        <div className="mt-6 grid gap-3 md:grid-cols-3">
-          {site.gallery.map((slot) => (
-            <PhotoSlotCard key={slot.label} slot={slot} />
-          ))}
-        </div>
-      </section>
+      {glenn ? (
+        <GlennGallery items={site.gallery} />
+      ) : (
+        site.gallery.length > 0 && (
+          <section className="mt-16" id="gallery">
+            <h2 className="font-heading text-3xl">Photos</h2>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+              {stills.map((item) => (
+                <SiteMediaCard key={item.src} item={item} />
+              ))}
+            </div>
+            {videos.length > 0 && (
+              <div className="mt-8 grid gap-4 md:grid-cols-2">
+                {videos.map((item) => (
+                  <SiteMediaCard key={item.src} item={item} />
+                ))}
+              </div>
+            )}
+          </section>
+        )
+      )}
 
       <section id="enquire" className="mt-16 grid gap-8 rounded-3xl bg-[var(--site)] px-6 py-10 text-white md:grid-cols-[1.2fr_0.8fr] md:px-10">
         <div>
@@ -107,18 +131,27 @@ export function SitePage({ site }: { site: PublicSite }) {
             ))}
           </ul>
         </div>
-        <div className="space-y-2 text-sm">
+        <div className="space-y-3 text-sm">
           <p>
-            <span className="text-white/60">Phone</span>
+            <span className="text-white/60">Phone / WhatsApp</span>
             <br />
-            {site.phone}
+            {site.phones.map((p) => (
+              <span key={p} className="mt-1 block">
+                <a className="underline-offset-2 hover:underline" href={telHref(p)}>
+                  {p}
+                </a>
+                {" · "}
+                <a className="underline-offset-2 hover:underline" href={waHref(p)} target="_blank" rel="noreferrer">
+                  WhatsApp
+                </a>
+              </span>
+            ))}
           </p>
           <p>
             <span className="text-white/60">Email</span>
             <br />
             {site.email}
           </p>
-          <p className="pt-4 text-white/60">Enquiry form and WhatsApp link will go here.</p>
         </div>
       </section>
     </article>

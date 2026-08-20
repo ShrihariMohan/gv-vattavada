@@ -1,10 +1,6 @@
-export type SiteTone = "royal" | "glenn" | "kitchen" | "rental";
+import { GLENN_MEDIA, KITCHEN_MEDIA, ROYAL_MEDIA, SITE_CONTACTS, type SiteMedia } from "@/marketing/media";
 
-export interface PhotoSlot {
-  label: string;
-  hint: string;
-  className?: string;
-}
+export type SiteTone = "royal" | "glenn" | "kitchen" | "rental";
 
 export interface PublicSite {
   slug: string;
@@ -14,11 +10,12 @@ export interface PublicSite {
   description: string;
   tone: SiteTone;
   location: string;
-  phone: string;
+  phones: string[];
   email: string;
   hours: string;
   heroCta: string;
-  gallery: PhotoSlot[];
+  hero: SiteMedia | null;
+  gallery: SiteMedia[];
   highlights: { title: string; body: string }[];
   offerings: { title: string; detail: string; price: string }[];
   notes: string[];
@@ -27,99 +24,84 @@ export interface PublicSite {
 export const PUBLIC_SITES: PublicSite[] = [
   {
     slug: "royal-residency",
-    name: "Royal Residency",
-    kicker: "Stay · Vattavada",
+    name: SITE_CONTACTS.royal.name,
+    kicker: "Stay · Koviloor, Munnar",
     tagline: "Quiet rooms above the tea line.",
     description:
-      "Placeholder copy. Royal Residency is a small-capacity stay for guests who want valley light, slow mornings, and easy access to Vattavada viewpoints. Replace this paragraph with the real story, house rules, and check-in notes.",
+      "G.V Royal Residency is a compact stay at Koviloor Bus Stand, Munnar — valley light, slow mornings, and an easy hop to Vattavada viewpoints. Breakfast and dinner are a short ride at G.V Cloudy Kitchen.",
     tone: "royal",
-    location: "Vattavada, Idukki, Kerala",
-    phone: "+91 48 6800 0001",
+    location: SITE_CONTACTS.royal.address,
+    phones: [...SITE_CONTACTS.royal.phones],
     email: "stay@royalresidency.local",
     hours: "Check-in 2:00 PM · Check-out 11:00 AM",
-    heroCta: "Enquire for dates",
-    gallery: [
-      { label: "Hero exterior", hint: "Wide facade / valley at dusk", className: "md:col-span-2 md:row-span-2 min-h-80" },
-      { label: "Lobby", hint: "Reception + seating" },
-      { label: "Room 101", hint: "Garden room interior" },
-      { label: "Breakfast deck", hint: "Outdoor table" },
-      { label: "Night lights", hint: "Pathway / porch" },
-    ],
+    heroCta: "Call for dates",
+    hero: ROYAL_MEDIA[0],
+    gallery: ROYAL_MEDIA,
     highlights: [
-      { title: "Valley-facing rooms", body: "Dummy: each room will list occupancy, view, and a photo set." },
-      { title: "Homestyle breakfast", body: "Dummy: served at Cloudy Kitchen or in-house — confirm later." },
-      { title: "Guided viewpoints", body: "Dummy: sunrise points and walking routes to add." },
+      { title: "Koviloor location", body: "Next to Koviloor Bus Stand, Munnar — PIN 685505 with the rest of the group." },
+      { title: "Simple, clean rooms", body: "Twin and single rooms with extra bedding when you need it." },
+      { title: "Kitchen nearby", body: "Meals at G.V Cloudy Kitchen, Urkadu, Vattavada." },
     ],
     offerings: [
-      { title: "Garden room", detail: "2 guests · placeholder amenities list", price: "₹ — / night" },
-      { title: "Valley suite", detail: "3 guests · placeholder amenities list", price: "₹ — / night" },
-      { title: "Family cottage", detail: "4 guests · placeholder amenities list", price: "₹ — / night" },
+      { title: "Twin room", detail: "Two beds · extra mattress on request", price: "Ask for tonight" },
+      { title: "Single room", detail: "One bed · extra mattress under the frame", price: "Ask for tonight" },
+      { title: "Family stay", detail: "Combine rooms for a group", price: "Ask for tonight" },
     ],
-    notes: ["Photos, rates, and cancellation policy TBD.", "Wi-Fi, parking, and extra-bed rules TBD."],
+    notes: ["PIN 685505 for all G.V properties.", "Car rental via Cloudy Drives on request."],
   },
   {
     slug: "cloudy-glenn",
-    name: "Cloudy Glenn Resort",
-    kicker: "Stay · mist & meadow",
-    tagline: "A slower resort day in the clouds.",
+    name: SITE_CONTACTS.glenn.name,
+    kicker: "Stay · Vattavada hillside",
+    tagline: "A-frame cottages in the mist.",
     description:
-      "Placeholder copy. Cloudy Glenn is the more open, landscape-first stay — lawns, longer stays, and family groups. Swap this text for the resort positioning, season notes, and what is included in the tariff.",
+      "G.V Cloudy Glenn Resort sits on a forested slope in Vattavada, Munnar. Stilt cottages with blue roofs, balconies over the trees, and room to spread out for families and longer stays.",
     tone: "glenn",
-    location: "Vattavada, Idukki, Kerala",
-    phone: "+91 48 6800 0002",
+    location: SITE_CONTACTS.glenn.address,
+    phones: [...SITE_CONTACTS.glenn.phones],
     email: "stay@cloudyglenn.local",
     hours: "Check-in 1:00 PM · Check-out 11:00 AM",
-    heroCta: "Plan a stay",
-    gallery: [
-      { label: "Lawn panorama", hint: "Mist over the grounds", className: "md:col-span-2 min-h-72" },
-      { label: "Cottage porch", hint: "Seating + plants" },
-      { label: "Bonfire corner", hint: "Evening setup" },
-      { label: "Indoor lounge", hint: "Fireplace / books" },
-      { label: "Trail start", hint: "Gate or path" },
-    ],
+    heroCta: "Call to plan a stay",
+    hero: GLENN_MEDIA[0],
+    gallery: GLENN_MEDIA,
     highlights: [
-      { title: "Space to spread out", body: "Dummy: cottages vs rooms, lawn access, kids-friendly notes." },
-      { title: "Weather as the amenity", body: "Dummy: best months, monsoon notes, what to pack." },
-      { title: "Shared table", body: "Dummy: meals with Cloudy Kitchen or in-resort dining." },
+      { title: "Hill cottages", body: "A-frame rooms on stilts, each with a balcony over the slope." },
+      { title: "Weather as the amenity", body: "Mist, forest, and flowering banks — pack a warm layer." },
+      { title: "Same group kitchen", body: "Eat at G.V Cloudy Kitchen in Urkadu, or ask about in-cottage plans." },
     ],
     offerings: [
-      { title: "Mist cottage", detail: "2–3 guests · placeholder", price: "₹ — / night" },
-      { title: "Glenn family", detail: "4 guests · placeholder", price: "₹ — / night" },
-      { title: "Extended stay", detail: "Weekly dummy rate", price: "₹ — / week" },
+      { title: "Mist cottage", detail: "2–3 guests · balcony", price: "Ask for tonight" },
+      { title: "Glenn family", detail: "Combine cottages for a group", price: "Ask for tonight" },
+      { title: "Longer stay", detail: "Weekly stays on the hillside", price: "Ask for the week" },
     ],
-    notes: ["Activity list (treks, camps) TBD.", "Pet policy TBD."],
+    notes: ["PIN 685505.", "More photos go in public/gv-cloudy-glenn — then add them in src/marketing/media.ts."],
   },
   {
     slug: "cloudy-kitchen",
-    name: "Cloudy Kitchen",
-    kicker: "Restaurant · all day",
-    tagline: "Highland plates, kettle always on.",
+    name: SITE_CONTACTS.kitchen.name,
+    kicker: "Restaurant · Urkadu, Vattavada",
+    tagline: "Indian, Arabic, Chinese — kettle always on.",
     description:
-      "Placeholder copy. Cloudy Kitchen is the public restaurant — breakfast through dinner, guest and walk-in. Replace with cuisine story, sourcing, and whether it is reservation-only in peak season.",
+      "G.V Cloudy Kitchen is the group restaurant on the Urkadu road in Vattavada: breakfast through dinner for stay guests and walk-ins, with delivery across Vattavada.",
     tone: "kitchen",
-    location: "Vattavada, Idukki, Kerala",
-    phone: "+91 48 6800 0003",
+    location: SITE_CONTACTS.kitchen.address,
+    phones: [...SITE_CONTACTS.kitchen.phones],
     email: "hello@cloudykitchen.local",
-    hours: "Daily 7:30 AM – 10:00 PM (dummy hours)",
+    hours: "Daily 7:30 AM – 10:00 PM",
     heroCta: "View the menu",
-    gallery: [
-      { label: "Dining room", hint: "Interior wide shot", className: "md:col-span-2 min-h-72" },
-      { label: "Pass / kitchen", hint: "Service window" },
-      { label: "Signature plate", hint: "Hero dish photo" },
-      { label: "Tea service", hint: "Kettle / glass" },
-      { label: "Evening tables", hint: "Warm lighting" },
-    ],
+    hero: KITCHEN_MEDIA[0],
+    gallery: KITCHEN_MEDIA,
     highlights: [
-      { title: "Kerala highland cooking", body: "Dummy: meals, porotta, curries, seasonal specials." },
-      { title: "Stay guests eat first", body: "Dummy: room charge vs walk-in, breakfast timings." },
-      { title: "Open kitchen energy", body: "Dummy: chef note and allergens to add later." },
+      { title: "Highland plates", body: "Meals, porotta, biryani, and Arabic-Chinese favourites." },
+      { title: "Stay guests and walk-in", body: "Charge to the room at Royal Residency or Cloudy Glenn, or pay at the counter." },
+      { title: "Delivery in Vattavada", body: "Call the kitchen numbers below for delivery." },
     ],
     offerings: [
-      { title: "Breakfast", detail: "Dosa, eggs, tea — placeholder menu", price: "from ₹ —" },
-      { title: "Lunch meals", detail: "Kerala meals / thali placeholder", price: "from ₹ —" },
-      { title: "Dinner mains", detail: "Curry + breads placeholder", price: "from ₹ —" },
+      { title: "Breakfast", detail: "Idly, dosa, poori, parotta, curries", price: "from ₹15" },
+      { title: "Lunch", detail: "Meals, biryani, noodles, chicken 65", price: "from ₹100" },
+      { title: "Drinks", detail: "Water, soda, Coke, 7up, Sprite", price: "from ₹20" },
     ],
-    notes: ["Full menu PDF TBD.", "Bar / BYO policy TBD."],
+    notes: ["Halal kitchen.", "PIN 685505."],
   },
   {
     slug: "car-rental",
@@ -127,31 +109,26 @@ export const PUBLIC_SITES: PublicSite[] = [
     kicker: "Car rental · self drive & with driver",
     tagline: "Cars for the hill roads.",
     description:
-      "Placeholder copy. Cloudy Drives is the upcoming car-rental arm — airport pickups, local sightseeing, and self-drive for guests of Royal Residency and Cloudy Glenn. Replace with fleet photos, insurance, and deposit rules.",
+      "Cloudy Drives is the car-rental arm — airport pickups, local sightseeing, and self-drive for guests of G.V Royal Residency and G.V Cloudy Glenn.",
     tone: "rental",
-    location: "Based in Vattavada · pickup by arrangement",
-    phone: "+91 48 6800 0004",
+    location: `Based in Vattavada, Munnar · PIN 685505 · pickup by arrangement`,
+    phones: [...SITE_CONTACTS.royal.phones],
     email: "drives@cloudydrives.local",
-    hours: "Bookings 6:00 AM – 9:00 PM (dummy)",
+    hours: "Bookings 6:00 AM – 9:00 PM",
     heroCta: "Request a car",
-    gallery: [
-      { label: "Fleet line-up", hint: "3 cars, front 3/4", className: "md:col-span-2 min-h-72" },
-      { label: "SUV detail", hint: "Interior / boot" },
-      { label: "Hatchback", hint: "Side profile" },
-      { label: "With driver", hint: "Driver + guest (consent)" },
-      { label: "Hill road", hint: "Scenic drive still" },
-    ],
+    hero: null,
+    gallery: [],
     highlights: [
-      { title: "Stay-linked pickup", body: "Dummy: collect from either property or Kochi/Coimbatore." },
-      { title: "Self-drive or chauffeur", body: "Dummy: licence rules and driver hours." },
-      { title: "Clear day rates", body: "Dummy: km limit, fuel, night halt — fill later." },
+      { title: "Stay-linked pickup", body: "Collect from either property or Kochi / Coimbatore." },
+      { title: "Self-drive or chauffeur", body: "Licence rules and driver hours on request." },
+      { title: "Clear day rates", body: "Km limit, fuel, and night halt — ask when you book." },
     ],
     offerings: [
-      { title: "Compact hatch", detail: "4 seats · dummy economy", price: "₹ — / day" },
-      { title: "SUV", detail: "6–7 seats · dummy family", price: "₹ — / day" },
-      { title: "With driver", detail: "8 hrs / 80 km placeholder", price: "₹ — / day" },
+      { title: "Compact hatch", detail: "4 seats", price: "Ask for the day" },
+      { title: "SUV", detail: "6–7 seats", price: "Ask for the day" },
+      { title: "With driver", detail: "Local / outstation", price: "Ask for the day" },
     ],
-    notes: ["Documents, deposit, and insurance TBD.", "Outstation tariff TBD."],
+    notes: ["Documents, deposit, and insurance on booking.", "PIN 685505."],
   },
 ];
 

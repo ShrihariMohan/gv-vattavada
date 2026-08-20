@@ -172,6 +172,9 @@ export interface Product extends SyncMeta {
   tax_bps: number;
   unit: string;
   sku: string;
+  description: string;
+  image_url: string;
+  tags: string[];
   active: boolean;
   display_order: number;
 }

@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     default: "Cloudy Group · Vattavada",
     template: "%s",
   },
-  description: "Royal Residency, Cloudy Glenn Resort, Cloudy Kitchen, and Cloudy Drives.",
+  description: "G.V Royal Residency, G.V Cloudy Glenn Resort, G.V Cloudy Kitchen, and Cloudy Drives.",
   applicationName: "Staff console",
   manifest: "/manifest.webmanifest",
   appleWebApp: {

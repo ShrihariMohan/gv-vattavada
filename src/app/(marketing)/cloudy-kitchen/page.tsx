@@ -6,8 +6,8 @@ import type { Metadata } from "next";
 const SLUG = "cloudy-kitchen";
 
 export const metadata: Metadata = {
-  title: "Cloudy Kitchen · Vattavada",
-  description: "Highland plates, kettle always on. Menu photos coming soon.",
+  title: "G.V Cloudy Kitchen · Urkadu, Vattavada",
+  description: "Indian, Arabic and Chinese meals in Urkadu, Vattavada, Munnar. PIN 685505.",
 };
 
 export default function Page() {

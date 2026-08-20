@@ -6,8 +6,8 @@ import type { Metadata } from "next";
 const SLUG = "royal-residency";
 
 export const metadata: Metadata = {
-  title: "Royal Residency · Vattavada",
-  description: "Quiet rooms above the tea line. Photos and rates coming soon.",
+  title: "G.V Royal Residency · Koviloor, Munnar",
+  description: "Stay at Koviloor Bus Stand, Munnar. PIN 685505.",
 };
 
 export default function Page() {

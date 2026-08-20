@@ -2,13 +2,24 @@
 import { Screen } from "@/ui/Screen";
 import { useApp } from "@/ui/AppProvider";
 import { reregisterAppServiceWorker, serviceWorkerStatus, unregisterAppServiceWorker } from "@/pwa/service-worker";
+import { backupCsvFiles, backupToJson, parseBackupJson } from "@/domain/backup";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+
+function downloadFile(name: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function SettingsPage() {
-  const { service, refresh, user, syncAdapter } = useApp();
+  const { service, refresh, user, syncAdapter, restoreBackup } = useApp();
   const [sw, setSw] = useState({ registered: false, disabled: false });
 
   const loadSw = async () => {
@@ -30,6 +41,59 @@ export default function SettingsPage() {
           <CardContent className="text-sm">
             <p className="font-mono">{service.state.currentDeviceId}</p>
             <p className="mt-1 text-muted-foreground">{user?.name} · {user?.role}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Local backup</CardTitle>
+            <CardDescription>
+              Free-tier Supabase may not keep a durable export. Download a JSON snapshot of this device database (Dexie) to restore later, or CSV for spreadsheets.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                const blob = new Blob([backupToJson(service.state)], { type: "application/json" });
+                downloadFile(`vbm-backup-${new Date().toISOString().slice(0, 10)}.json`, blob);
+                toast.success("JSON backup saved");
+              }}
+            >
+              Download JSON
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                for (const file of backupCsvFiles(service.state)) {
+                  downloadFile(file.name, new Blob([file.body], { type: "text/csv" }));
+                }
+                toast.success("CSV files downloaded");
+              }}
+            >
+              Download CSVs
+            </Button>
+            <label className={cn(buttonVariants({ variant: "secondary" }), "cursor-pointer")}>
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="sr-only"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  try {
+                    const text = await file.text();
+                    const incoming = parseBackupJson(text);
+                    if (!window.confirm("Replace this device’s local database with the backup? Current unsynced work on this device will be overwritten.")) return;
+                    restoreBackup(incoming);
+                    toast.success("Backup restored on this device");
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Import failed");
+                  }
+                }}
+              />
+              Import JSON
+            </label>
           </CardContent>
         </Card>
         <Card>

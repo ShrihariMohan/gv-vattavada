@@ -1,7 +1,11 @@
 import { cn } from "@/lib/utils";
-import type { PhotoSlot } from "@/marketing/sites";
 
-export function PhotoSlotCard({ slot }: { slot: PhotoSlot }) {
+/** Unused placeholder card kept for rental pages until fleet photos exist. */
+export function PhotoSlotCard({
+  slot,
+}: {
+  slot: { label: string; hint: string; className?: string };
+}) {
   return (
     <figure
       className={cn(

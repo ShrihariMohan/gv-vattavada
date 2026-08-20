@@ -75,3 +75,74 @@ The public marketing pages and the staff console shell must load when the networ
 * Navigations: network-first, then cache, then `/offline.html`.
 * Dexie remains the operational store for POS/stays while offline.
 * The header continues to show Online/Offline and pending sync count.
+
+
+
+
+Since I am using a free supabase , have an export option to locally export the database or sync data to a local file. This can be done by implementing a feature in the app that allows users to download their data in a common format (like CSV or JSON) for backup purposes in settings page. This way, users can have a local copy of their data even if they are using the free tier of Supabase, which may have limitations on data retention or export capabilities. I can also use this to import data back into the app if needed by increasing the server capacity or switching to a paid plan.
+
+
+I have added photos inside public folder, so that they can be accessed directly via URL. This is useful for static assets that need to be served quickly and efficiently. Make sure to reference these images correctly in your app to ensure they load properly, in the public sites for the 3 business . Gv cloudy glenn resory , fv royal residency and cloudy kitchen. Please go through the images and ensure they are optimized for web use (compressed, appropriate dimensions) to enhance performance and user experience. Create Gallery for Glenn resort. I will add more photos to the public folder as needed, and you can update the gallery accordingly.
+
+The POS screen should be designed to be user-friendly and efficient for staff to use. It should allow for quick order taking, easy navigation between different menu items, and clear visibility of the current order. Implement features like search functionality, category filters, and a clear display of item prices and descriptions. Additionally, ensure that the POS screen is responsive and works well on different devices, including tablets and desktops. Instead of showing bill seperatley show the count in the POS items grid itself. Cancel button is not working in that POS screen, please fix it so that staff can cancel orders easily. Also, implement a feature to allow staff to edit or modify existing orders before finalizing the bill. This will help in reducing errors and improving customer satisfaction.
+
+In the public sites 
+Restaurant adress urkadu vattavada munnar 
+ Phone number is +918608933892,+918754504478,8838267578
+Gv royal residency kovilloor bustand munnar +918608933892,8838267578
+Cloudy glenn Resort , vattavada munnar pincode same for all 3 business. Please make sure these details are correctly displayed on the respective public sites for each business.
+
+
+Pre Seed these products 
+
+Breakfast
+
+1 plate idly - 50rs 
+1 set thattu dosa - 50rs
+1 set poori - 60rs 
+plain dosa - 70rs
+ghee dosa - 80rs
+masala dosa - 90rs
+egg dosa - 80rs
+parotta 1 piece - 15 rs 
+1 chappathi - 15rs
+kadala curry - 60
+green peas curry - 60
+egg curry - 60
+chicken curry - 140
+beef curry - 180
+half boil  - 40
+omelete - 40
+kalaki - 40
+
+lunch : 
+
+kerala meals - 140
+tamilnadu meals - 140
+chicken briyani - 180 
+beef briyani - 220
+chicken rice - 180
+beef rice - 220
+chicken noodles - 180
+beef noodles - 220
+chicken 65 quarter - 240
+chicken 65 half - 360
+chicken 65 full - 700
+chilly chicken - 200
+chicken kondattam - 200
+pepper chicken - 200
+beef  roast - 240
+beef fry - 240
+fish fry - 100
+ghee rice - 120
+veg rice - 140
+veg noodles - 140
+chili gobi - 140 
+gobi 65  - 140
+
+water bottle - 20
+coke - 35
+7up - 35
+sprite - 35
+miranda - 35
+soda - 20rs

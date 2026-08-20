@@ -34,6 +34,7 @@ import {
 } from "./rules";
 import { createSeedState } from "./seed";
 import { AppService, invoicePrintModel, MemorySupabaseAdapter } from "./service";
+import { billFromOrder } from "./bill";
 import type { SyncQueueItem } from "./types";
 
 function svc(iso = "2026-08-19T16:00:00.000Z") {
@@ -143,9 +144,9 @@ describe("R8 businesses", () => {
     const s = svc();
     expect(s.state.businesses.map((b) => b.code)).toEqual(["BUS001", "BUS002", "BUS003"]);
     expect(s.state.businesses.map((b) => b.name)).toEqual([
-      "Royal Residency",
-      "Cloudy Glenn Resort",
-      "Cloudy Kitchen",
+      "G.V Royal Residency",
+      "G.V Cloudy Glenn Resort",
+      "G.V Cloudy Kitchen",
     ]);
     expect(s.state.businesses.filter((b) => b.type === "STAY")).toHaveLength(2);
     expect(s.state.businesses.filter((b) => b.type === "RESTAURANT")).toHaveLength(1);
@@ -167,6 +168,8 @@ describe("R11-R17 restaurant POS", () => {
   it("supports hold, resume, cancel, tax, discount, split pay, tables, lifecycle", () => {
     expect(PRODUCT_CATEGORIES).toContain("Breakfast");
     const s = svc();
+    expect(s.state.products.find((p) => p.id === "p-idly")?.price_paise).toBe(5000);
+    expect(s.state.products.filter((p) => p.business_id === "biz-rest").length).toBeGreaterThan(40);
     const tables = s.state.tables;
     expect(tables.find((t) => t.name === "Table 1")?.status).toBe("AVAILABLE");
     expect(tables.find((t) => t.name === "Table 5")?.status).toBe("RESERVED");
@@ -271,7 +274,7 @@ describe("R36-R38 invoices and print", () => {
   it("builds A4 fields and thermal layout", () => {
     const s = svc();
     const model = invoicePrintModel(s.state, "inv-hist-1");
-    expect(model.businessName).toBe("Cloudy Kitchen");
+    expect(model.businessName).toBe("G.V Cloudy Kitchen");
     expect(model.invoiceNo).toMatch(/^RES-/);
     expect(model.gstin).toBeTruthy();
     expect(model.thankYou).toBe("Thank you");
@@ -279,6 +282,19 @@ describe("R36-R38 invoices and print", () => {
     expect(thermalWidthChars(80)).toBe(48);
     const lines = wrapInvoiceLines([{ name: "Parotta", qty: 2, amount: "₹30.00" }], 32);
     expect(lines[0].length).toBeLessThanOrEqual(33);
+  });
+});
+
+describe("order bill view", () => {
+  it("builds a kitchen ticket from an open order", () => {
+    const s = svc();
+    const order = s.startOrder({ business_id: "biz-rest", guest_name: "Meera" });
+    s.addOrderItem(order.id, "p-tea", 2);
+    const bill = billFromOrder(s.state, order.id);
+    expect(bill.kind).toBe("BILL");
+    expect(bill.customer).toBe("Meera");
+    expect(bill.items.some((i) => i.name === "Tea" && i.qty === 2)).toBe(true);
+    expect(bill.footerLines.some((l) => /computer-generated/i.test(l))).toBe(true);
   });
 });
 

@@ -5,6 +5,7 @@ const PRECACHE = [
   "/cloudy-glenn",
   "/cloudy-kitchen",
   "/car-rental",
+  "/menu",
   "/login",
   "/dashboard",
   "/pos",

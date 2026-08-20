@@ -2,8 +2,8 @@
 
 import { createSeedState } from "@/domain/seed";
 import { AppService, createDefaultSyncAdapter, type SyncAdapter } from "@/domain/service";
+import { loadState, normalizeState, saveState } from "@/db/persist";
 import type { AppState, Role, User } from "@/domain/types";
-import { loadState, saveState } from "@/db/persist";
 import { registerAppServiceWorker } from "@/pwa/service-worker";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
@@ -16,6 +16,7 @@ type Ctx = {
   logout: () => void;
   can: (action: Parameters<AppService["require"]>[0]) => boolean;
   syncAdapter: SyncAdapter;
+  restoreBackup: (incoming: AppState) => void;
 };
 
 const AppCtx = createContext<Ctx | null>(null);
@@ -129,6 +130,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       },
       syncAdapter: adapter.current,
+      restoreBackup: (incoming: AppState) => {
+        const keepUser = service.state.currentUserId;
+        const next = normalizeState(incoming);
+        next.currentDeviceId = deviceId();
+        next.online = typeof navigator !== "undefined" ? navigator.onLine : true;
+        if (keepUser && next.users.some((u) => u.id === keepUser)) next.currentUserId = keepUser;
+        svc.current = new AppService(next);
+        refresh();
+      },
     };
   }, [ready, refresh, tick]);
 

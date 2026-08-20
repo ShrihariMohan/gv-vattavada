@@ -104,7 +104,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-full bg-background">
-      <header className="sticky top-0 z-30 border-b bg-sidebar text-sidebar-foreground">
+      <header className="no-print sticky top-0 z-30 border-b bg-sidebar text-sidebar-foreground">
         <div className="mx-auto flex max-w-[1500px] items-center gap-3 px-4 py-2.5">
           <Link href="/dashboard" className="flex items-center gap-2 font-semibold tracking-tight">
             <span className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground text-sm">
@@ -153,7 +153,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <div className="mx-auto flex max-w-[1500px]">
-        <aside className="hidden w-60 shrink-0 border-r bg-card/40 md:block">
+        <aside className="no-print hidden w-60 shrink-0 border-r bg-card/40 md:block">
           <ScrollArea className="h-[calc(100vh-57px)] p-3">
             {GROUPS.map((g) => {
               const items = g.items.filter((n) => !n.permission || canRole(user.role, n.permission));
@@ -189,9 +189,9 @@ export function Shell({ children }: { children: ReactNode }) {
             })}
           </ScrollArea>
         </aside>
-        <main className="min-w-0 flex-1 p-4 pb-24 md:p-6">{children}</main>
+        <main className="min-w-0 flex-1 p-4 pb-24 print:p-0 md:p-6">{children}</main>
       </div>
-      <nav className="fixed bottom-0 left-0 right-0 z-20 grid grid-cols-5 border-t bg-card md:hidden">
+      <nav className="no-print fixed bottom-0 left-0 right-0 z-20 grid grid-cols-5 border-t bg-card md:hidden">
         {[
           ["/dashboard", "Home", LayoutDashboard],
           ["/pos", "POS", UtensilsCrossed],

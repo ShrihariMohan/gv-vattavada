@@ -27,7 +27,7 @@ export default function LoginPage() {
       <Card className="relative w-full max-w-sm shadow-lg">
         <CardHeader>
           <CardTitle>Staff console</CardTitle>
-          <CardDescription>Royal Residency · Cloudy Glenn · Cloudy Kitchen</CardDescription>
+          <CardDescription>G.V Royal Residency · G.V Cloudy Glenn · G.V Cloudy Kitchen</CardDescription>
         </CardHeader>
         <CardContent>
           <form

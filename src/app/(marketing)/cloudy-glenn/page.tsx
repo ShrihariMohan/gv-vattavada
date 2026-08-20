@@ -6,8 +6,8 @@ import type { Metadata } from "next";
 const SLUG = "cloudy-glenn";
 
 export const metadata: Metadata = {
-  title: "Cloudy Glenn Resort · Vattavada",
-  description: "A slower resort day in the clouds. Photos and rates coming soon.",
+  title: "G.V Cloudy Glenn Resort · Vattavada",
+  description: "A-frame cottages on the Vattavada hillside, Munnar. PIN 685505.",
 };
 
 export default function Page() {

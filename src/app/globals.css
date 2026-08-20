@@ -56,11 +56,29 @@
 }
 
 @media print {
-  header, aside, nav, form button[type="button"] {
+  @page {
+    margin: 12mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  [data-slot="dialog-overlay"],
+  [data-slot="dialog-popup"],
+  [data-slot="dialog-content"] {
     display: none !important;
   }
   main {
     padding: 0 !important;
+  }
+  .bill-print-root,
+  .bill-sheet {
+    box-shadow: none !important;
+    max-width: none !important;
   }
 }
 

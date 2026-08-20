@@ -1,6 +1,7 @@
 import { GLOBAL_EXPENSE_CATEGORIES } from "./rules";
 import { hashPasswordSync } from "./rules";
 import { emptyState } from "./service";
+import { KITCHEN_MENU, MENU_CATEGORY_NAMES, categoryNameFromTags } from "@/marketing/menu";
 import type { AppState, Business, Product, Room, User } from "./types";
 
 function utc(iso: string) {
@@ -23,11 +24,11 @@ export function createSeedState(deviceId = "DEVICE-RESTAURANT-TABLET-01"): AppSt
 
   const stayA: Business = {
     ...meta("biz-stay-a"),
-    name: "Royal Residency",
+    name: "G.V Royal Residency",
     type: "STAY",
     code: "BUS001",
-    address: "Vattavada, Idukki, Kerala",
-    phone: "04868-000001",
+    address: "Koviloor Bus Stand, Munnar, Idukki, Kerala 685505",
+    phone: "+91 86089 33892, +91 88382 67578",
     email: "stay@royalresidency.local",
     currency: "INR",
     timezone: "Asia/Kolkata",
@@ -37,11 +38,11 @@ export function createSeedState(deviceId = "DEVICE-RESTAURANT-TABLET-01"): AppSt
   };
   const stayB: Business = {
     ...meta("biz-stay-b"),
-    name: "Cloudy Glenn Resort",
+    name: "G.V Cloudy Glenn Resort",
     type: "STAY",
     code: "BUS002",
-    address: "Vattavada, Idukki, Kerala",
-    phone: "04868-000002",
+    address: "Vattavada, Munnar, Idukki, Kerala 685505",
+    phone: "+91 86089 33892, +91 88382 67578",
     email: "stay@cloudyglenn.local",
     currency: "INR",
     timezone: "Asia/Kolkata",
@@ -51,11 +52,11 @@ export function createSeedState(deviceId = "DEVICE-RESTAURANT-TABLET-01"): AppSt
   };
   const restaurant: Business = {
     ...meta("biz-rest"),
-    name: "Cloudy Kitchen",
+    name: "G.V Cloudy Kitchen",
     type: "RESTAURANT",
     code: "BUS003",
-    address: "Vattavada, Idukki, Kerala",
-    phone: "04868-000003",
+    address: "Urkadu, Vattavada, Munnar, Idukki, Kerala 685505",
+    phone: "+91 86089 33892, +91 87545 04478, +91 88382 67578",
     email: "hello@cloudykitchen.local",
     currency: "INR",
     timezone: "Asia/Kolkata",
@@ -119,33 +120,27 @@ export function createSeedState(deviceId = "DEVICE-RESTAURANT-TABLET-01"): AppSt
     room("r-202", stayB.id, "rt-b", "202", "Mist 202", 300000, "AVAILABLE"),
   ];
 
-  const cats = ["Breakfast", "Lunch", "Dinner", "Beverages", "Snacks", "Main Course", "Desserts"];
-  state.productCategories = cats.map((name, i) => ({
+  state.productCategories = MENU_CATEGORY_NAMES.map((name, i) => ({
     id: `cat-${i}`,
     business_id: restaurant.id,
     name,
     display_order: i,
   }));
 
-  const products: Array<[string, string, number, number, string]> = [
-    ["p-parotta", "Parotta", 1500, 5, "Main Course"],
-    ["p-chicken", "Chicken Curry", 18000, 5, "Main Course"],
-    ["p-tea", "Tea", 2000, 5, "Beverages"],
-    ["p-dosa", "Masala Dosa", 8000, 5, "Breakfast"],
-    ["p-meals", "Kerala Meals", 14000, 5, "Lunch"],
-    ["p-payasam", "Payasam", 6000, 5, "Desserts"],
-  ];
-  state.products = products.map((p, i) => {
-    const cat = state.productCategories.find((c) => c.name === p[4])!;
+  state.products = KITCHEN_MENU.map((p, i) => {
+    const cat = state.productCategories.find((c) => c.name === categoryNameFromTags(p.tags))!;
     const prod: Product = {
-      ...meta(p[0]),
+      ...meta(p.id),
       business_id: restaurant.id,
       category_id: cat.id,
-      name: p[1],
-      price_paise: p[2],
-      tax_bps: p[3] * 100,
+      name: p.name,
+      price_paise: p.rupees * 100,
+      tax_bps: 500,
       unit: "pc",
-      sku: p[0].toUpperCase(),
+      sku: p.id.toUpperCase(),
+      description: p.description,
+      image_url: p.image,
+      tags: [...p.tags],
       active: true,
       display_order: i,
     };
@@ -189,7 +184,7 @@ export function createSeedState(deviceId = "DEVICE-RESTAURANT-TABLET-01"): AppSt
       ...meta("oi-1"),
       order_id: "ord-open",
       product_id: "p-parotta",
-      name: "Parotta",
+      name: "Parotta 1 piece",
       qty: 2,
       unit_price_paise: 1500,
       tax_bps: 500,
@@ -198,9 +193,9 @@ export function createSeedState(deviceId = "DEVICE-RESTAURANT-TABLET-01"): AppSt
       ...meta("oi-2"),
       order_id: "ord-open",
       product_id: "p-chicken",
-      name: "Chicken Curry",
+      name: "Chicken curry",
       qty: 1,
-      unit_price_paise: 18000,
+      unit_price_paise: 14000,
       tax_bps: 500,
     },
   ];

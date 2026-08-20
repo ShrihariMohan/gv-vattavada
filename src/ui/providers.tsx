@@ -12,7 +12,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <TooltipProvider>
         <AppProvider>
           {children}
-          <Toaster position="top-right" />
+          <Toaster position="top-right" className="no-print" />
         </AppProvider>
       </TooltipProvider>
     </ThemeProvider>

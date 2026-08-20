@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createSeedState } from "./seed";
 import { AppService, MemorySupabaseAdapter } from "./service";
+import { backupCsvFiles, backupToJson, parseBackupJson } from "./backup";
+import { productMatchesQuery, productMatchesSelectedTag, publicMenuItems } from "@/marketing/menu";
 import { syncQueueDependencyOrder } from "./rules";
 import type { SyncQueueItem } from "./types";
 
@@ -183,5 +185,56 @@ describe("sync edge cases", () => {
     const result = await s.processSyncQueue(adapter);
     expect(result.some((r) => r.error === "CONFLICT")).toBe(true);
     expect(s.state.conflicts.length).toBeGreaterThan(0);
+  });
+});
+
+describe("local backup", () => {
+  it("round-trips JSON and includes invoice CSV", () => {
+    const s = svc();
+    const json = backupToJson(s.state);
+    const restored = parseBackupJson(json);
+    expect(restored.businesses.map((b) => b.code)).toEqual(["BUS001", "BUS002", "BUS003"]);
+    expect(restored.invoices.length).toBe(s.state.invoices.length);
+    const csvs = backupCsvFiles(s.state);
+    expect(csvs.some((f) => f.name === "invoices.csv" && f.body.includes("invoice_number"))).toBe(true);
+  });
+});
+
+describe("menu tags and visibility", () => {
+  it("seeds title-case names and searchable tags", () => {
+    const s = svc();
+    expect(s.state.products.find((p) => p.id === "p-dosa")?.name).toBe("Masala Dosa");
+    expect(s.state.products.find((p) => p.id === "p-chicken-biryani")?.name).toBe("Chicken Biryani");
+    const rice = s.state.products.find((p) => p.id === "p-chicken-rice");
+    expect(rice?.tags).toEqual(expect.arrayContaining(["chinese", "lunch", "dinner", "chicken"]));
+    expect(productMatchesQuery(rice!, "chinese")).toBe(true);
+    expect(productMatchesQuery(rice!, "lunk")).toBe(true);
+    expect(productMatchesSelectedTag(rice!, "chinese")).toBe(true);
+    expect(productMatchesSelectedTag(rice!, "breakfast")).toBe(false);
+    expect(productMatchesSelectedTag(rice!, null)).toBe(true);
+  });
+
+  it("hides inactive products from the public menu", () => {
+    const s = svc();
+    s.updateProduct("p-dosa", { active: false });
+    const restaurant = s.state.businesses.find((b) => b.type === "RESTAURANT")!;
+    const items = publicMenuItems(s.state.products, restaurant.id);
+    expect(items.find((p) => p.id === "p-dosa")).toBeUndefined();
+    expect(items.find((p) => p.id === "p-idly")).toBeTruthy();
+  });
+});
+
+describe("POS cancel and edit", () => {
+  it("cancels an in-progress ticket and lets staff add to a held ticket", () => {
+    const s = svc();
+    const order = s.startOrder({ business_id: "biz-rest", table_id: "table-4" });
+    s.addOrderItem(order.id, "p-tea", 2);
+    s.deleteOrder(order.id);
+    expect(s.state.orders.find((o) => o.id === order.id)?.status).toBe("CANCELLED");
+    expect(s.state.orders.find((o) => o.id === order.id)?.deleted_at).toBeTruthy();
+    s.addOrderItem("ord-held", "p-idly", 1);
+    expect(s.state.orders.find((o) => o.id === "ord-held")?.status).toBe("IN_PROGRESS");
+    s.updateOrderGuest("ord-held", { guest_name: "Meera", guest_phone: "9000000099" });
+    expect(s.state.orders.find((o) => o.id === "ord-held")?.guest_name).toBe("Meera");
   });
 });

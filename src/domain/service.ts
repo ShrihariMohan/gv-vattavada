@@ -375,6 +375,9 @@ export class AppService {
     tax_bps: number;
     unit?: string;
     sku?: string;
+    description?: string;
+    image_url?: string;
+    tags?: string[];
     display_order?: number;
   }): Product {
     this.require("products.edit");
@@ -388,6 +391,9 @@ export class AppService {
       tax_bps: input.tax_bps,
       unit: input.unit ?? "pc",
       sku: input.sku?.trim() || input.name.trim().toUpperCase().replace(/\s+/g, "-"),
+      description: input.description?.trim() ?? "",
+      image_url: input.image_url?.trim() ?? "",
+      tags: input.tags ?? [],
       active: true,
       display_order: input.display_order ?? this.state.products.length,
     };
@@ -400,7 +406,7 @@ export class AppService {
 
   updateProduct(
     productId: string,
-    patch: Partial<Pick<Product, "name" | "price_paise" | "tax_bps" | "unit" | "sku" | "active" | "category_id" | "display_order">>,
+    patch: Partial<Pick<Product, "name" | "price_paise" | "tax_bps" | "unit" | "sku" | "description" | "image_url" | "tags" | "active" | "category_id" | "display_order">>,
   ): Product {
     this.require("products.edit");
     const product = this.state.products.find((p) => p.id === productId);
@@ -455,6 +461,7 @@ export class AppService {
     this.require("pos.create_bill");
     const order = this.mustOrder(orderId);
     if (order.status === "PAID" || order.status === "CANCELLED") throw new Error("Order is closed");
+    if (order.status === "HELD") this.transitionOrder(orderId, "OPEN");
     const product = this.state.products.find((p) => p.id === productId && p.active);
     if (!product) throw new Error("Product not found");
     const existing = this.state.orderItems.find((i) => i.order_id === orderId && i.product_id === productId && !i.deleted_at);
@@ -520,7 +527,14 @@ export class AppService {
   }
 
   cancelBill(orderId: string) {
+    const order = this.mustOrder(orderId);
+    if (order.status === "PAID") throw new Error("Cannot cancel a paid order. Void the invoice first.");
+    if (order.status === "CANCELLED") return order;
     return this.transitionOrder(orderId, "CANCELLED");
+  }
+
+  replaceState(next: AppState) {
+    this.state = next;
   }
 
   orderTotals(orderId: string, discountPaise: Paise = 0) {
@@ -1313,29 +1327,29 @@ export function createDefaultSyncAdapter(): SyncAdapter {
   return new MemorySupabaseAdapter();
 }
 
+import { billFromInvoice } from "./bill";
+
 export function invoicePrintModel(state: AppState, invoiceId: string) {
   const invoice = state.invoices.find((i) => i.id === invoiceId);
   if (!invoice) throw new Error("Invoice not found");
-  const business = state.businesses.find((b) => b.id === invoice.business_id)!;
-  const customer = state.customers.find((c) => c.id === invoice.customer_id);
-  const items = state.invoiceItems.filter((i) => i.invoice_id === invoiceId);
-  const payments = state.payments.filter((p) => p.invoice_id === invoiceId);
+  const business = state.businesses.find((b) => b.id === invoice.business_id);
+  const bill = billFromInvoice(state, invoiceId);
   return {
-    logo: business.logo_url,
-    businessName: business.name,
-    address: business.address,
-    phone: business.phone,
-    gstin: business.gstin,
-    invoiceNo: invoice.invoice_number,
-    date: invoice.business_date,
-    customer: customer?.name ?? "Walk-in",
-    items: items.map((i) => ({ name: i.name, qty: i.qty, amount: formatINR(i.amount_paise) })),
-    subtotal: formatINR(invoice.subtotal_paise),
-    discount: formatINR(invoice.discount_paise),
-    tax: formatINR(invoice.tax_paise),
-    total: formatINR(invoice.total_paise),
-    paymentMethod: payments.map((p) => p.method).join(" + ") || "UNPAID",
-    paymentStatus: invoice.payment_status,
+    logo: business?.logo_url ?? null,
+    businessName: bill.businessName,
+    address: bill.address,
+    phone: bill.phone,
+    gstin: bill.gstin,
+    invoiceNo: bill.docNo,
+    date: bill.date,
+    customer: bill.customer,
+    items: bill.items,
+    subtotal: bill.subtotal,
+    discount: bill.discount,
+    tax: bill.tax,
+    total: bill.total,
+    paymentMethod: bill.paymentMethod,
+    paymentStatus: bill.paymentStatus,
     thankYou: "Thank you",
   };
 }
