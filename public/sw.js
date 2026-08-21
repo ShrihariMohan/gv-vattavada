@@ -1,4 +1,4 @@
-const CACHE = "vbm-shell-v3";
+const CACHE = "vbm-shell-v4";
 const PRECACHE = [
   "/",
   "/royal-residency",
@@ -12,6 +12,13 @@ const PRECACHE = [
   "/offline.html",
   "/manifest.webmanifest",
   "/icon.svg",
+  "/logo.jpeg",
+  "/logo-transparent.png",
+  "/favicon-32.png",
+  "/apple-touch-icon.png",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/splash-iphone.jpg",
 ];
 
 self.addEventListener("install", (event) => {

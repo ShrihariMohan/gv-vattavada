@@ -40,6 +40,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { PUBLIC_SITES } from "@/marketing/sites";
+import { BrandLogo, BrandMark } from "@/ui/brand";
 
 const GROUPS: { title: string; items: { href: string; label: string; icon: typeof LayoutDashboard; permission?: Parameters<typeof canRole>[1] }[] }[] = [
   {
@@ -95,8 +96,9 @@ export function Shell({ children }: { children: ReactNode }) {
 
   if (!ready) {
     return (
-      <div className="flex min-h-full items-center justify-center text-muted-foreground">
-        Loading local database…
+      <div className="flex min-h-full flex-col items-center justify-center gap-4 bg-[var(--pwa-background,#f3f7f8)] px-6">
+        <BrandLogo height={72} className="max-h-[72px]" />
+        <p className="text-sm text-muted-foreground">Loading local database…</p>
       </div>
     );
   }
@@ -112,9 +114,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <header className="no-print sticky top-0 z-30 border-b bg-sidebar text-sidebar-foreground">
         <div className="mx-auto flex max-w-[1500px] items-center gap-3 px-4 py-2.5">
           <Link href="/dashboard" className="flex items-center gap-2 font-semibold tracking-tight">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground text-sm">
-              C
-            </span>
+            <BrandMark size={32} className="size-8" />
             <span className="hidden sm:inline">Staff console</span>
           </Link>
           <Link href="/" className="hidden text-xs text-sidebar-foreground/70 hover:text-sidebar-foreground lg:inline">

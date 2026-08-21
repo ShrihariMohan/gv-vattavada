@@ -2,10 +2,12 @@ import Link from "next/link";
 import { PUBLIC_SITES } from "@/marketing/sites";
 import { SiteMediaCard } from "@/marketing/site-media";
 import { buttonVariants } from "@/components/ui/button";
+import { BrandLogo } from "@/ui/brand";
 
 export default function HomePage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-14 md:py-20">
+      <BrandLogo height={64} className="mb-8 max-h-16" />
       <p className="text-xs font-medium uppercase tracking-[0.22em] text-primary">Vattavada · Munnar · PIN 685505</p>
       <h1 className="mt-4 max-w-3xl font-heading text-5xl leading-[1.02] tracking-tight md:text-7xl">
         Four addresses.

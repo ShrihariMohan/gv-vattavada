@@ -2,13 +2,15 @@ import Link from "next/link";
 import { PUBLIC_SITES } from "@/marketing/sites";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { BrandLogo, BrandMark } from "@/ui/brand";
 
 export function MarketingNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-foreground/8 bg-background/80 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-        <Link href="/" className="font-heading text-sm font-semibold tracking-tight">
-          Cloudy Group
+      <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-2.5">
+        <Link href="/" className="flex min-w-0 items-center gap-2 font-heading text-sm font-semibold tracking-tight">
+          <BrandMark size={28} className="size-7 rounded-md" />
+          <span className="truncate">Cloudy Group</span>
         </Link>
         <nav className="ml-auto hidden items-center gap-5 text-sm text-muted-foreground md:flex">
           <Link href="/menu" className="hover:text-foreground">
@@ -41,8 +43,11 @@ export function MarketingNav() {
 export function MarketingFooter() {
   return (
     <footer className="mt-24 border-t">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-8 text-sm text-muted-foreground">
-        <p>Vattavada · Munnar · Idukki · PIN 685505</p>
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 text-sm text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-3">
+          <BrandLogo height={36} className="max-h-9 opacity-90" />
+          <p>Vattavada · Munnar · Idukki · PIN 685505</p>
+        </div>
         <p>G.V Royal Residency · G.V Cloudy Glenn · G.V Cloudy Kitchen · Cloudy Drives</p>
       </div>
     </footer>

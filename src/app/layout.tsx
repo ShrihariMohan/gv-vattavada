@@ -21,9 +21,42 @@ export const metadata: Metadata = {
   description: "G.V Royal Residency, G.V Cloudy Glenn Resort, G.V Cloudy Kitchen, and Cloudy Drives.",
   applicationName: "Staff console",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: "/logo.jpeg",
+  },
   appleWebApp: {
     capable: true,
     title: "Staff console",
+    statusBarStyle: "default",
+    startupImage: [
+      {
+        url: "/splash-iphone.jpg",
+        media:
+          "(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)",
+      },
+      {
+        url: "/splash-iphone.jpg",
+        media:
+          "(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)",
+      },
+      {
+        url: "/splash-iphone-max.jpg",
+        media:
+          "(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)",
+      },
+      {
+        url: "/splash-iphone-max.jpg",
+        media:
+          "(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)",
+      },
+      { url: "/splash-iphone.jpg" },
+    ],
   },
 };
 

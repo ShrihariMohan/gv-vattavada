@@ -2,6 +2,7 @@
 
 import type { BillView } from "@/domain/bill";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/ui/brand";
 
 export function BillSheet({ bill, className }: { bill: BillView; className?: string }) {
   const meta = [bill.guestPhone && `Ph ${bill.guestPhone}`, bill.room && `Rm ${bill.room}`, bill.table]
@@ -16,6 +17,7 @@ export function BillSheet({ bill, className }: { bill: BillView; className?: str
       style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif" }}
     >
       <header className="border-b border-black/20 pb-3 text-center">
+        <BrandLogo height={52} className="mx-auto mb-2 max-h-[52px]" />
         <p className="text-lg font-semibold tracking-tight">{bill.businessName}</p>
         <p className="mt-1 text-xs leading-relaxed text-[#444]">{bill.address}</p>
         <p className="text-xs text-[#444]">{bill.phone}</p>

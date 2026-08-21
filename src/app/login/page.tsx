@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { BrandLogo } from "@/ui/brand";
 
 export default function LoginPage() {
   const { ready, user, login } = useApp();
@@ -19,15 +20,23 @@ export default function LoginPage() {
     if (ready && user) router.replace("/dashboard");
   }, [ready, user, router]);
 
-  if (!ready) return <div className="flex min-h-full items-center justify-center text-muted-foreground">Loading…</div>;
+  if (!ready) {
+    return (
+      <div className="flex min-h-full flex-col items-center justify-center gap-4 bg-[var(--pwa-background,#f3f7f8)] px-6">
+        <BrandLogo height={72} className="max-h-[72px]" />
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex min-h-full flex-1 items-center justify-center overflow-hidden p-6">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,color-mix(in_oklch,var(--primary)_28%,transparent),transparent_42%),radial-gradient(circle_at_90%_0%,color-mix(in_oklch,var(--accent)_45%,transparent),transparent_38%)]" />
       <Card className="relative w-full max-w-sm shadow-lg">
         <CardHeader>
-          <CardTitle>Staff console</CardTitle>
-          <CardDescription>G.V Royal Residency · G.V Cloudy Glenn · G.V Cloudy Kitchen</CardDescription>
+          <BrandLogo height={56} className="mx-auto mb-2 max-h-14" />
+          <CardTitle className="text-center">Staff console</CardTitle>
+          <CardDescription className="text-center">G.V Royal Residency · G.V Cloudy Glenn · G.V Cloudy Kitchen</CardDescription>
         </CardHeader>
         <CardContent>
           <form
