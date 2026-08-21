@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/ui/providers";
+import { publicSiteUrl } from "@/marketing/seo";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,12 +15,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(publicSiteUrl()),
   title: {
-    default: "Cloudy Group · Vattavada",
+    default: "Stay, Restaurant & Car Rental in Vattavada, Munnar | Cloudy Group",
     template: "%s",
   },
-  description: "G.V Royal Residency, G.V Cloudy Glenn Resort, G.V Cloudy Kitchen, and Cloudy Drives.",
-  applicationName: "Staff console",
+  description:
+    "Cloudy Group in Vattavada, Munnar (PIN 685505): hillside stays, G.V Cloudy Kitchen, and Cloudy Drives car rental — self-drive or with driver.",
+  applicationName: "Cloudy Group",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -69,7 +72,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="en"
+      lang="en-IN"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >

@@ -1,14 +1,12 @@
 import { SitePage } from "@/marketing/site-page";
 import { siteBySlug } from "@/marketing/sites";
+import { publicMetadata, siteSeo } from "@/marketing/seo";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 const SLUG = "car-rental";
 
-export const metadata: Metadata = {
-  title: "Cloudy Drives · Car rental",
-  description: "Cars for the hill roads. Fleet photos and tariffs coming soon.",
-};
+export const metadata: Metadata = publicMetadata(siteSeo(siteBySlug(SLUG)!));
 
 export default function Page() {
   const site = siteBySlug(SLUG);

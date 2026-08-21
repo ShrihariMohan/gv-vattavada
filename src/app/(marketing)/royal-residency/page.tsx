@@ -1,14 +1,12 @@
 import { SitePage } from "@/marketing/site-page";
 import { siteBySlug } from "@/marketing/sites";
+import { publicMetadata, siteSeo } from "@/marketing/seo";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 const SLUG = "royal-residency";
 
-export const metadata: Metadata = {
-  title: "G.V Royal Residency · Koviloor, Munnar",
-  description: "Stay at Koviloor Bus Stand, Munnar. PIN 685505.",
-};
+export const metadata: Metadata = publicMetadata(siteSeo(siteBySlug(SLUG)!));
 
 export default function Page() {
   const site = siteBySlug(SLUG);

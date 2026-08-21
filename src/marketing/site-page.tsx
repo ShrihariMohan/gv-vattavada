@@ -4,6 +4,8 @@ import { GlennGallery, SiteMediaCard } from "@/marketing/site-media";
 import { telHref, waHref } from "@/marketing/media";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { JsonLd } from "@/marketing/json-ld";
+import { organizationJsonLd, siteJsonLd, websiteJsonLd } from "@/marketing/seo";
 
 const TONE: Record<PublicSite["tone"], string> = {
   royal: "[--site:var(--royal)]",
@@ -21,6 +23,7 @@ export function SitePage({ site }: { site: PublicSite }) {
 
   return (
     <article className={cn("mx-auto max-w-6xl px-4 py-10 md:py-16", TONE[site.tone])}>
+      <JsonLd data={[organizationJsonLd(), websiteJsonLd(), siteJsonLd(site)]} />
       <p className="text-xs font-medium uppercase tracking-[0.22em] text-[var(--site)]">{site.kicker}</p>
       {glenn ? (
         <>
@@ -84,7 +87,7 @@ export function SitePage({ site }: { site: PublicSite }) {
         </section>
       ) : (
         <section className="mt-16">
-          <h2 className="font-heading text-3xl">{rental ? "Fleet" : "Stay options"}</h2>
+          <h2 className="font-heading text-3xl">{rental ? "Car rental options" : "Stay options"}</h2>
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             {site.offerings.map((o, i) => (
               <div key={o.title} className="rounded-2xl border bg-card p-5">

@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 import { PublicMenu } from "@/marketing/public-menu";
+import { JsonLd } from "@/marketing/json-ld";
+import { MENU_SEO, menuJsonLd, organizationJsonLd, publicMetadata, websiteJsonLd } from "@/marketing/seo";
 
-export const metadata: Metadata = {
-  title: "Menu · G.V Cloudy Kitchen",
-  description: "Breakfast, lunch, dinner, and drinks at G.V Cloudy Kitchen, Urkadu, Vattavada, Munnar.",
-};
+export const metadata: Metadata = publicMetadata(MENU_SEO);
 
 export default function MenuPage() {
-  return <PublicMenu />;
+  return (
+    <>
+      <JsonLd data={[organizationJsonLd(), websiteJsonLd(), menuJsonLd()]} />
+      <PublicMenu />
+    </>
+  );
 }

@@ -32,9 +32,9 @@ export function PublicMenu() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 md:py-16">
       <p className="text-xs font-medium uppercase tracking-[0.22em] text-[var(--kitchen)]">G.V Cloudy Kitchen</p>
-      <h1 className="mt-3 font-heading text-4xl tracking-tight md:text-6xl">Menu</h1>
+      <h1 className="mt-3 font-heading text-4xl tracking-tight md:text-6xl">Menu in Vattavada</h1>
       <p className="mt-4 max-w-2xl text-muted-foreground">
-        Indian, Arabic and Chinese plates in Urkadu, Vattavada. Hidden items from the staff product list do not appear here.
+        Indian, Arabic and Chinese plates at G.V Cloudy Kitchen, Urkadu, Vattavada. Hidden items from the staff product list do not appear here.
       </p>
       <p className="mt-2 text-sm text-muted-foreground">{kitchen.address}</p>
       <div className="mt-6 flex flex-wrap gap-3">

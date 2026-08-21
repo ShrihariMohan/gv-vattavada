@@ -106,10 +106,10 @@ export const PUBLIC_SITES: PublicSite[] = [
   {
     slug: "car-rental",
     name: "Cloudy Drives",
-    kicker: "Car rental · self drive & with driver",
-    tagline: "Cars for the hill roads.",
+    kicker: "Car rental · Vattavada & Munnar",
+    tagline: "Car rental in Vattavada for the hill roads.",
     description:
-      "Cloudy Drives is the car-rental arm — airport pickups, local sightseeing, and self-drive for guests of G.V Royal Residency and G.V Cloudy Glenn.",
+      "Cloudy Drives is car rental in Vattavada and Munnar — self-drive or with driver, local sightseeing, and Kochi / Coimbatore airport pickup for guests of G.V Royal Residency and G.V Cloudy Glenn.",
     tone: "rental",
     location: `Based in Vattavada, Munnar · PIN 685505 · pickup by arrangement`,
     phones: [...SITE_CONTACTS.royal.phones],
