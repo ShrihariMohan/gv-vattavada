@@ -118,6 +118,19 @@ export function invoiceForOrder(state: AppState, orderId: string) {
   return state.invoices.find((i) => i.order_id === orderId && !i.deleted_at) ?? null;
 }
 
+export function stayInvoiceForBooking(state: AppState, bookingId: string) {
+  return (
+    state.invoices.find(
+      (i) =>
+        i.booking_id === bookingId &&
+        !i.deleted_at &&
+        i.status !== "VOIDED" &&
+        i.status !== "CANCELLED" &&
+        i.status !== "REVERSED",
+    ) ?? null
+  );
+}
+
 export function orderChargePaise(state: AppState, orderId: string): number {
   const items = state.orderItems.filter((i) => i.order_id === orderId && !i.deleted_at);
   const taxBps = (bps: number) => (state.tax_enabled === false ? 0 : bps);

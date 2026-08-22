@@ -316,7 +316,7 @@ export class AppService {
       }
     }
     if (opts.table_id) {
-      const table = this.state.tables.find((t) => t.id === opts.table_id);
+      const table = this.state.tables.find((t) => t.id === opts.table_id && !t.deleted_at);
       if (!table) throw new Error("Table not found");
       if (table.status === "OCCUPIED" && table.current_order_id) {
         throw new Error("Table already has an open order");
@@ -656,7 +656,7 @@ export class AppService {
       business_id: order.business_id,
       type: "SALE",
       amount_paise: snap.total_paise,
-      description: `Invoice ${invoice.invoice_number}`,
+      description: `Invoice ${invoice.invoice_number}${opts.payments.length ? ` · ${opts.payments.map((p) => p.method).join("+")}` : ""}`,
       ref_id: invoice.id,
       ref_type: "invoice",
     });
@@ -703,14 +703,6 @@ export class AppService {
     };
     this.state.payments.push(payment);
     this.enqueue("payment", payment.id, "CREATE", payment);
-    this.pushLedger({
-      business_id: input.business_id,
-      type: "PAYMENT",
-      amount_paise: input.amount_paise,
-      description: `${input.method} payment`,
-      ref_id: payment.id,
-      ref_type: "payment",
-    });
     if (input.invoice_id) {
       const inv = this.state.invoices.find((i) => i.id === input.invoice_id)!;
       const paid = this.state.payments.filter((p) => p.invoice_id === inv.id && !p.deleted_at).reduce((a, p) => a + p.amount_paise, 0);
@@ -732,12 +724,24 @@ export class AppService {
     const user = this.require("invoices.modify_old");
     const inv = this.state.invoices.find((i) => i.id === invoiceId);
     if (!inv) throw new Error("Invoice not found");
+    if (inv.status === "VOIDED") return inv;
     const old = { ...inv };
     inv.status = financialRecordStatus("void");
     inv.updated_at = this.now();
     inv.sync_status = "PENDING";
     this.enqueue("invoice", inv.id, "UPDATE", inv);
     this.audit("invoice.void", "invoice", inv.id, old, { status: inv.status, reason, who: user.username });
+    const net = this.ledgerNetForRef(inv.id);
+    if (net !== 0) {
+      this.pushLedger({
+        business_id: inv.business_id,
+        type: "REFUND",
+        amount_paise: -net,
+        description: `Void ${inv.invoice_number}`,
+        ref_id: inv.id,
+        ref_type: "invoice",
+      });
+    }
     return inv;
   }
 
@@ -963,19 +967,30 @@ export class AppService {
     this.stamp(b);
     this.setRoomStatus(b.room_id, "CLEANING");
     this.enqueue("booking", b.id, "UPDATE", b);
-    this.pushLedger({
-      business_id: b.business_id,
-      type: "BOOKING",
-      amount_paise: b.total_paise,
-      description: `Stay ${b.id}`,
-      ref_id: b.id,
-      ref_type: "booking",
-    });
+    if (this.stayIncomePosted(b.id) === 0) {
+      this.pushLedger({
+        business_id: b.business_id,
+        type: "BOOKING",
+        amount_paise: b.total_paise,
+        description: `Stay ${b.check_in} → ${b.check_out}`,
+        ref_id: b.id,
+        ref_type: "booking",
+      });
+    }
     return b;
   }
 
   generateStayInvoice(bookingId: string): Invoice {
     this.require("invoices.view");
+    const existing = this.state.invoices.find(
+      (i) =>
+        i.booking_id === bookingId &&
+        !i.deleted_at &&
+        i.status !== "VOIDED" &&
+        i.status !== "CANCELLED" &&
+        i.status !== "REVERSED",
+    );
+    if (existing) return existing;
     const b = this.mustBooking(bookingId);
     const nights = daysBetween(b.check_in, b.check_out);
     const lines = [
@@ -1023,6 +1038,67 @@ export class AppService {
       this.enqueue("invoice_item", ii.id, "CREATE", ii);
     }
     return invoice;
+  }
+
+  createTable(input: { business_id: string; name: string }): RestaurantTable {
+    this.require("products.edit");
+    const biz = this.state.businesses.find((b) => b.id === input.business_id);
+    if (!biz || biz.type !== "RESTAURANT") throw new Error("Pick the restaurant");
+    const name = input.name.trim();
+    if (!name) throw new Error("Table name is required");
+    if (this.state.tables.some((t) => !t.deleted_at && t.business_id === input.business_id && t.name.toLowerCase() === name.toLowerCase())) {
+      throw new Error("That table name already exists");
+    }
+    const table: RestaurantTable = {
+      ...this.meta(),
+      business_id: input.business_id,
+      name,
+      status: "AVAILABLE",
+      current_order_id: null,
+    };
+    this.state.tables.push(table);
+    this.enqueue("table", table.id, "CREATE", table);
+    return table;
+  }
+
+  updateTable(id: string, input: { name?: string; status?: RestaurantTable["status"] }): RestaurantTable {
+    this.require("products.edit");
+    const table = this.state.tables.find((t) => t.id === id && !t.deleted_at);
+    if (!table) throw new Error("Table not found");
+    if (input.name !== undefined) {
+      const name = input.name.trim();
+      if (!name) throw new Error("Table name is required");
+      if (
+        this.state.tables.some(
+          (t) => !t.deleted_at && t.business_id === table.business_id && t.id !== table.id && t.name.toLowerCase() === name.toLowerCase(),
+        )
+      ) {
+        throw new Error("That table name already exists");
+      }
+      table.name = name;
+    }
+    if (input.status) {
+      if (table.current_order_id && input.status !== "OCCUPIED") {
+        throw new Error("Clear or complete the open order before changing this table");
+      }
+      if (input.status === "OCCUPIED" && !table.current_order_id) {
+        throw new Error("Open an order on the table instead of marking it occupied");
+      }
+      table.status = input.status;
+    }
+    this.stamp(table);
+    this.enqueue("table", table.id, "UPDATE", table);
+    return table;
+  }
+
+  deleteTable(id: string) {
+    this.require("products.edit");
+    const table = this.state.tables.find((t) => t.id === id && !t.deleted_at);
+    if (!table) throw new Error("Table not found");
+    if (table.current_order_id) throw new Error("Cannot delete a table with an open order");
+    table.deleted_at = this.now();
+    this.stamp(table);
+    this.enqueue("table", table.id, "DELETE", table);
   }
 
   createRoom(input: {
@@ -1599,6 +1675,24 @@ export class AppService {
       row.sync_status = status;
       if (server_id) row.server_id = server_id;
     }
+  }
+
+  private ledgerNetForRef(refId: string) {
+    return this.state.ledger
+      .filter((l) => !l.deleted_at && l.ref_id === refId && (l.type === "SALE" || l.type === "BOOKING" || l.type === "REFUND" || l.type === "ADJUSTMENT"))
+      .reduce((a, l) => a + l.amount_paise, 0);
+  }
+
+  private stayIncomePosted(bookingId: string) {
+    const invoiceIds = this.state.invoices.filter((i) => i.booking_id === bookingId && !i.deleted_at).map((i) => i.id);
+    return this.state.ledger
+      .filter(
+        (l) =>
+          !l.deleted_at &&
+          ((l.ref_id === bookingId && (l.type === "BOOKING" || l.type === "REFUND")) ||
+            (invoiceIds.includes(l.ref_id) && (l.type === "SALE" || l.type === "REFUND"))),
+      )
+      .reduce((a, l) => a + l.amount_paise, 0);
   }
 
   private pushLedger(input: Omit<LedgerEntry, keyof ReturnType<AppService["meta"]> | "business_date"> & { amount_paise: number }) {

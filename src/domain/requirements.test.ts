@@ -230,6 +230,9 @@ describe("R19-R25 stays", () => {
     const inv = s.generateStayInvoice(booking.id);
     expect(inv.invoice_number).toMatch(/^STAY-2026-/);
     expect(s.state.invoiceItems.filter((i) => i.invoice_id === inv.id).some((i) => i.name === "Food")).toBe(true);
+    const again = s.generateStayInvoice(booking.id);
+    expect(again.id).toBe(inv.id);
+    expect(s.state.invoices.filter((i) => i.booking_id === booking.id && !i.deleted_at)).toHaveLength(1);
     const cal = s.calendar("biz-stay-a", "2026-08-19", "2026-08-22");
     expect(cal[0].days.length).toBe(4);
   });

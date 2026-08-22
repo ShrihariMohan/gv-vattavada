@@ -59,7 +59,7 @@ function PosInner() {
   const products = service.state.products.filter((p) => p.business_id === restaurant.id && p.active && !p.deleted_at);
   const q = query.trim().toLowerCase();
   const visible = products.filter((p) => productMatchesSelectedTag(p, tag) && productMatchesQuery(p, q));
-  const tables = service.state.tables.filter((t) => t.business_id === restaurant.id);
+  const tables = service.state.tables.filter((t) => t.business_id === restaurant.id && !t.deleted_at);
   const tickets = service.state.orders.filter(
     (o) =>
       o.business_id === restaurant.id &&

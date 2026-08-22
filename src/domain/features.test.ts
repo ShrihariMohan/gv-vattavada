@@ -432,4 +432,125 @@ describe("POS cancel and edit", () => {
     s.updateOrderGuest("ord-held", { guest_name: "Meera", guest_phone: "9000000099" });
     expect(s.state.orders.find((o) => o.id === "ord-held")?.guest_name).toBe("Meera");
   });
+
+  it("creates, renames, and deletes restaurant tables", () => {
+    const s = svc();
+    const table = s.createTable({ business_id: "biz-rest", name: "Garden 1" });
+    expect(table.status).toBe("AVAILABLE");
+    s.updateTable(table.id, { name: "Garden 2", status: "RESERVED" });
+    expect(s.state.tables.find((t) => t.id === table.id)?.name).toBe("Garden 2");
+    s.deleteTable(table.id);
+    expect(s.state.tables.find((t) => t.id === table.id)?.deleted_at).toBeTruthy();
+    expect(() => s.startOrder({ business_id: "biz-rest", table_id: table.id })).toThrow(/not found/);
+  });
+});
+
+function liveLedger(s: AppService) {
+  return s.state.ledger.filter((l) => !l.deleted_at && l.type !== "PAYMENT");
+}
+
+describe("ledger", () => {
+  it("posts one SALE for a paid POS bill, not a matching PAYMENT", () => {
+    const s = svc();
+    const before = liveLedger(s).length;
+    const order = s.startOrder({ business_id: "biz-rest" });
+    s.addOrderItem(order.id, "p-tea", 2);
+    const total = s.orderTotals(order.id).total_paise;
+    const bill = s.generateBill({
+      orderId: order.id,
+      payments: [
+        { method: "CASH", amount_paise: 2000 },
+        { method: "UPI", amount_paise: total - 2000 },
+      ],
+    });
+    const added = liveLedger(s).slice(before);
+    const sales = added.filter((l) => l.type === "SALE" && l.ref_id === bill.id);
+    expect(sales).toHaveLength(1);
+    expect(sales[0].amount_paise).toBe(total);
+    expect(added.some((l) => l.type === "PAYMENT")).toBe(false);
+    expect(s.state.payments.filter((p) => p.invoice_id === bill.id)).toHaveLength(2);
+  });
+
+  it("reverses the sale when an invoice is voided and does not reverse twice", () => {
+    const s = svc();
+    const order = s.startOrder({ business_id: "biz-rest" });
+    s.addOrderItem(order.id, "p-tea", 1);
+    const total = s.orderTotals(order.id).total_paise;
+    const bill = s.generateBill({
+      orderId: order.id,
+      payments: [{ method: "UPI", amount_paise: total }],
+    });
+    s.voidInvoice(bill.id, "wrong table");
+    const forInv = liveLedger(s).filter((l) => l.ref_id === bill.id);
+    expect(forInv.some((l) => l.type === "SALE" && l.amount_paise === total)).toBe(true);
+    expect(forInv.some((l) => l.type === "REFUND" && l.amount_paise === -total)).toBe(true);
+    expect(forInv.reduce((a, l) => a + l.amount_paise, 0)).toBe(0);
+    s.voidInvoice(bill.id, "again");
+    expect(liveLedger(s).filter((l) => l.ref_id === bill.id && l.type === "REFUND")).toHaveLength(1);
+  });
+
+  it("records a later payment without a second income line", () => {
+    const s = svc();
+    const order = s.startOrder({ business_id: "biz-rest" });
+    s.addOrderItem(order.id, "p-tea", 2);
+    const total = s.orderTotals(order.id).total_paise;
+    const bill = s.generateBill({
+      orderId: order.id,
+      payments: [{ method: "CASH", amount_paise: 1000 }],
+    });
+    const afterBill = liveLedger(s).filter((l) => l.ref_id === bill.id);
+    s.recordPayment({
+      business_id: "biz-rest",
+      invoice_id: bill.id,
+      amount_paise: total - 1000,
+      method: "UPI",
+    });
+    expect(liveLedger(s).filter((l) => l.ref_id === bill.id)).toEqual(afterBill);
+    expect(s.state.invoices.find((i) => i.id === bill.id)?.payment_status).toBe("PAID");
+  });
+
+  it("posts one BOOKING at checkout even if a stay invoice and an advance exist", () => {
+    const s = svc();
+    const booking = s.createBooking({
+      business_id: "biz-stay-a",
+      customer_id: "cust-1",
+      room_id: "r-104",
+      check_in: "2026-08-25",
+      check_out: "2026-08-26",
+      adults: 1,
+      children: 0,
+      rate_paise: 450000,
+      paid_paise: 100000,
+      payment_method: "UPI",
+    });
+    s.checkIn(booking.id);
+    const inv = s.generateStayInvoice(booking.id);
+    s.checkOut(booking.id);
+    const stayLines = liveLedger(s).filter(
+      (l) => l.ref_id === booking.id || l.ref_id === inv.id,
+    );
+    expect(stayLines.filter((l) => l.type === "BOOKING")).toHaveLength(1);
+    expect(stayLines.filter((l) => l.type === "SALE")).toHaveLength(0);
+    expect(stayLines.filter((l) => l.type === "PAYMENT")).toHaveLength(0);
+    expect(stayLines[0].amount_paise).toBe(s.state.bookings.find((b) => b.id === booking.id)?.total_paise);
+    s.voidInvoice(inv.id, "reprint");
+    expect(stayLines.filter((l) => l.type === "BOOKING")).toHaveLength(1);
+    expect(liveLedger(s).filter((l) => l.ref_id === inv.id && l.type === "REFUND")).toHaveLength(0);
+  });
+
+  it("posts expenses as negative lines without touching sales", () => {
+    const s = svc();
+    const salesBefore = liveLedger(s).filter((l) => l.type === "SALE").length;
+    s.createExpense({
+      business_id: "biz-rest",
+      category: "Gas",
+      amount_paise: 50000,
+      payment_method: "CASH",
+      description: "Cylinder",
+    });
+    const exp = liveLedger(s).filter((l) => l.type === "EXPENSE" && l.description === "Cylinder");
+    expect(exp).toHaveLength(1);
+    expect(exp[0].amount_paise).toBe(-50000);
+    expect(liveLedger(s).filter((l) => l.type === "SALE")).toHaveLength(salesBefore);
+  });
 });

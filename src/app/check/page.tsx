@@ -4,6 +4,7 @@ import { Screen } from "@/ui/Screen";
 import { Money } from "@/ui/Shell";
 import { StatusBadge } from "@/ui/status-badge";
 import { useApp } from "@/ui/AppProvider";
+import { stayInvoiceForBooking } from "@/domain/bill";
 import { rupeesToPaise } from "@/domain/money";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -37,6 +38,18 @@ export default function CheckPage() {
   const guest = b ? service.state.customers.find((c) => c.id === b.customer_id) : null;
   const room = b ? service.state.rooms.find((r) => r.id === b.room_id) : null;
   const property = b ? service.state.businesses.find((x) => x.id === b.business_id) : null;
+  const stayInvoice = b ? stayInvoiceForBooking(service.state, b.id) : null;
+
+  const openOrCreateInvoice = () => {
+    if (!b) return;
+    try {
+      const inv = service.generateStayInvoice(b.id);
+      refresh();
+      router.push(`/invoices/${inv.id}`);
+    } catch (er) {
+      toast.error(er instanceof Error ? er.message : "Failed");
+    }
+  };
 
   return (
     <Screen title="Check-in / Check-out" description="Arrive and depart against the booking. Extra charges go on the stay invoice.">
@@ -156,40 +169,28 @@ export default function CheckPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button type="submit">Check out</Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      try {
-                        const inv = service.generateStayInvoice(b.id);
-                        refresh();
-                        router.push(`/invoices/${inv.id}`);
-                      } catch (er) {
-                        toast.error(er instanceof Error ? er.message : "Failed");
-                      }
-                    }}
-                  >
-                    Generate invoice
-                  </Button>
+                  {stayInvoice ? (
+                    <Link className={buttonVariants({ variant: "secondary" })} href={`/invoices/${stayInvoice.id}`}>
+                      View invoice
+                    </Link>
+                  ) : (
+                    <Button type="button" variant="secondary" onClick={openOrCreateInvoice}>
+                      Generate invoice
+                    </Button>
+                  )}
                 </div>
               </form>
             )}
-            {b.status === "CHECKED_OUT" && (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  try {
-                    const inv = service.generateStayInvoice(b.id);
-                    refresh();
-                    router.push(`/invoices/${inv.id}`);
-                  } catch (er) {
-                    toast.error(er instanceof Error ? er.message : "Failed");
-                  }
-                }}
-              >
-                Generate invoice
-              </Button>
-            )}
+            {b.status === "CHECKED_OUT" &&
+              (stayInvoice ? (
+                <Link className={buttonVariants({ variant: "secondary" })} href={`/invoices/${stayInvoice.id}`}>
+                  View invoice
+                </Link>
+              ) : (
+                <Button variant="secondary" onClick={openOrCreateInvoice}>
+                  Generate invoice
+                </Button>
+              ))}
           </CardContent>
         </Card>
       )}

@@ -200,34 +200,33 @@ export function Shell({ children }: { children: ReactNode }) {
         </aside>
         <main className="min-w-0 flex-1 overflow-y-auto p-4 pb-24 print:overflow-visible print:p-0 md:p-6">{children}</main>
       </div>
-      <nav className="no-print fixed bottom-0 left-0 right-0 z-20 grid grid-cols-4 border-t bg-card md:hidden">
+      <nav className="no-print fixed bottom-0 left-0 right-0 z-20 grid grid-cols-4 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
         {[
           ["/dashboard", "Home", LayoutDashboard],
           ["/pos", "POS", UtensilsCrossed],
           ["/bookings", "Stay", BedDouble],
-        ].map(([href, label, Icon]) => (
-          <Link
-            key={String(href)}
-            href={String(href)}
-            className={cn(
-              "flex flex-col items-center gap-1 py-2 text-[11px]",
-              path === href ? "text-primary font-medium" : "text-muted-foreground",
-            )}
-          >
-            <Icon className="size-4" />
-            {String(label)}
-          </Link>
-        ))}
+        ].map(([href, label, Icon]) => {
+          const pathName = String(href);
+          const active = path === pathName || (pathName !== "/dashboard" && path.startsWith(pathName));
+          return (
+            <Link
+              key={pathName}
+              href={pathName}
+              aria-current={active ? "page" : undefined}
+              className="flex flex-col items-center gap-0.5 py-2.5 text-[11px] text-foreground"
+            >
+              <Icon className="size-6" fill={active ? "currentColor" : "none"} strokeWidth={1.75} />
+              <span className={active ? "font-semibold" : "font-normal text-muted-foreground"}>{String(label)}</span>
+            </Link>
+          );
+        })}
         <button
           type="button"
-          className={cn(
-            "flex flex-col items-center gap-1 py-2 text-[11px]",
-            moreOpen ? "text-primary font-medium" : "text-muted-foreground",
-          )}
+          className="flex flex-col items-center gap-0.5 py-2.5 text-[11px] text-foreground"
           onClick={() => setMoreOpen(true)}
         >
-          <Menu className="size-4" />
-          More
+          <Menu className="size-6" fill={moreOpen ? "currentColor" : "none"} strokeWidth={1.75} />
+          <span className={moreOpen ? "font-semibold" : "font-normal text-muted-foreground"}>More</span>
         </button>
       </nav>
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
