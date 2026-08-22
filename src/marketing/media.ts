@@ -57,6 +57,13 @@ export const KITCHEN_MEDIA: SiteMedia[] = [
   { src: "/gv-cloudy-kitchen/gv-cloudy-2.jpeg", alt: "Service counter and tables", kind: "image", label: "Service area" },
 ];
 
+export const GURU_TRAVELS_MEDIA: SiteMedia[] = [
+  { src: "/guru-travels/guru-travels-1.jpeg", alt: "Guru Travels rental cars in Vattavada", kind: "image", label: "Rental cars" },
+  { src: "/guru-travels/guru-travels-2.jpeg", alt: "Maruti Swift manual for self-drive", kind: "image", label: "Swift · manual" },
+  { src: "/guru-travels/guru-travels-3.jpeg", alt: "Maruti Baleno diesel manual", kind: "image", label: "Baleno · diesel manual" },
+  { src: "/guru-travels/guru-travels-1.mp4", alt: "Guru Travels fleet video", kind: "video", label: "Fleet video" },
+];
+
 export function telHref(display: string) {
   return `tel:+${display.replace(/\D/g, "")}`;
 }

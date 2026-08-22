@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   LayoutDashboard,
   UtensilsCrossed,
@@ -39,6 +38,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { isPublicChromePath } from "@/marketing/seo";
 import { PUBLIC_SITES } from "@/marketing/sites";
 import { BrandLogo, BrandMark } from "@/ui/brand";
 
@@ -84,6 +84,12 @@ const GROUPS: { title: string; items: { href: string; label: string; icon: typeo
   },
 ];
 
+export function StaffFrame({ children }: { children: ReactNode }) {
+  const path = usePathname();
+  if (isPublicChromePath(path)) return children;
+  return <Shell>{children}</Shell>;
+}
+
 export function Shell({ children }: { children: ReactNode }) {
   const { ready, user, service, logout } = useApp();
   const path = usePathname();
@@ -110,8 +116,8 @@ export function Shell({ children }: { children: ReactNode }) {
     : null;
 
   return (
-    <div className="min-h-full bg-background">
-      <header className="no-print sticky top-0 z-30 border-b bg-sidebar text-sidebar-foreground">
+    <div className="flex h-dvh flex-col overflow-hidden bg-background print:h-auto print:overflow-visible">
+      <header className="no-print z-30 shrink-0 border-b bg-sidebar text-sidebar-foreground">
         <div className="mx-auto flex max-w-[1500px] items-center gap-3 px-4 py-2.5">
           <Link href="/dashboard" className="flex items-center gap-2 font-semibold tracking-tight">
             <BrandMark size={32} className="size-8" />
@@ -157,10 +163,9 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <div className="mx-auto flex max-w-[1500px]">
-        <aside className="no-print hidden w-60 shrink-0 border-r bg-card/40 md:block">
-          <ScrollArea className="h-[calc(100vh-57px)] p-3">
-            {GROUPS.map((g) => {
+      <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 print:block print:h-auto">
+        <aside className="no-print hidden w-60 shrink-0 overflow-y-auto border-r bg-card/40 p-3 md:block">
+          {GROUPS.map((g) => {
               const items = g.items.filter((n) => !n.permission || canRole(user.role, n.permission));
               if (!items.length) return null;
               return (
@@ -192,9 +197,8 @@ export function Shell({ children }: { children: ReactNode }) {
                 </div>
               );
             })}
-          </ScrollArea>
         </aside>
-        <main className="min-w-0 flex-1 p-4 pb-24 print:p-0 md:p-6">{children}</main>
+        <main className="min-w-0 flex-1 overflow-y-auto p-4 pb-24 print:overflow-visible print:p-0 md:p-6">{children}</main>
       </div>
       <nav className="no-print fixed bottom-0 left-0 right-0 z-20 grid grid-cols-4 border-t bg-card md:hidden">
         {[

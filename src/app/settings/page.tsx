@@ -19,8 +19,10 @@ function downloadFile(name: string, blob: Blob) {
 }
 
 export default function SettingsPage() {
-  const { service, refresh, user, syncAdapter, restoreBackup } = useApp();
+  const { service, refresh, user, syncAdapter, restoreBackup, can } = useApp();
   const [sw, setSw] = useState({ registered: false, disabled: false });
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const canCloudBackup = can("settings.manage");
 
   const loadSw = async () => {
     setSw(await serviceWorkerStatus());
@@ -47,7 +49,7 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle>Local backup</CardTitle>
             <CardDescription>
-              Free-tier Supabase may not keep a durable export. Download a JSON snapshot of this device database (Dexie) to restore later, or CSV for spreadsheets.
+              Snapshot of this device (Dexie): restore POS and stays on the same or another tablet. Use Cloud backup below to copy the shared Postgres database.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
@@ -94,6 +96,51 @@ export default function SettingsPage() {
               />
               Import JSON
             </label>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Cloud backup (Postgres)</CardTitle>
+            <CardDescription>
+              Dexie JSON is this device. The cloud copy lives in Supabase as <span className="font-mono">sync_records</span> JSON.
+              Download one <span className="font-mono">.sql</span> file that creates the tables and upserts every row — enough to recreate the database on another Postgres or Supabase project.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            <p className="text-sm text-muted-foreground">
+              Restore: paste the file into the new project’s SQL editor, or run{" "}
+              <span className="font-mono">psql "$DATABASE_URL" -f vbm-supabase.sql</span>. Then point this app at the new URL and service role key.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                disabled={!canCloudBackup || cloudBusy}
+                onClick={async () => {
+                  setCloudBusy(true);
+                  try {
+                    const res = await fetch("/api/sync/export");
+                    if (!res.ok) {
+                      const err = (await res.json().catch(() => null)) as { error?: string } | null;
+                      throw new Error(err?.error ?? `Export failed (${res.status})`);
+                    }
+                    const blob = await res.blob();
+                    const day = new Date().toISOString().slice(0, 10);
+                    downloadFile(`vbm-supabase-${day}.sql`, blob);
+                    const n = res.headers.get("X-Backup-Sync-Records") ?? "?";
+                    toast.success("Cloud SQL saved", { description: `${n} synced records. Store this file on your disk.` });
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Cloud export failed");
+                  } finally {
+                    setCloudBusy(false);
+                  }
+                }}
+              >
+                {cloudBusy ? "Exporting…" : "Download cloud SQL"}
+              </Button>
+            </div>
+            {!canCloudBackup && (
+              <p className="text-xs text-muted-foreground">Only an admin can export the full cloud database.</p>
+            )}
           </CardContent>
         </Card>
         <Card>

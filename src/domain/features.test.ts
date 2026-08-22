@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createSeedState } from "./seed";
 import { AppService, MemorySupabaseAdapter } from "./service";
 import { backupCsvFiles, backupToJson, parseBackupJson } from "./backup";
+import { cloudDumpToSql } from "./cloud-backup";
 import { normalizeState } from "@/db/persist";
 import { isListedOrder } from "@/domain/bill";
 import { productMatchesQuery, productMatchesSelectedTag, publicMenuItems } from "@/marketing/menu";
@@ -107,6 +108,24 @@ describe("products and closing edits", () => {
     expect(s.state.products.find((x) => x.id === p.id)?.sync_status).toBe("PENDING");
   });
 
+  it("omits tax from bills when collection is disabled", () => {
+    const s = svc();
+    const order = s.startOrder({ business_id: "biz-rest" });
+    s.addOrderItem(order.id, "p-tea", 2);
+    const withTax = s.orderTotals(order.id);
+    expect(withTax.tax_paise).toBeGreaterThan(0);
+    s.setTaxEnabled(false);
+    const without = s.orderTotals(order.id);
+    expect(without.tax_paise).toBe(0);
+    expect(without.total_paise).toBe(without.subtotal_paise);
+    const bill = s.generateBill({
+      orderId: order.id,
+      payments: [{ method: "CASH", amount_paise: without.total_paise }],
+    });
+    expect(bill.tax_paise).toBe(0);
+    expect(bill.total_paise).toBe(without.subtotal_paise);
+  });
+
   it("staff cannot edit products", () => {
     const s = svc();
     s.logout();
@@ -209,6 +228,33 @@ describe("local backup", () => {
     expect(restored.invoices.length).toBe(s.state.invoices.length);
     const csvs = backupCsvFiles(s.state);
     expect(csvs.some((f) => f.name === "invoices.csv" && f.body.includes("invoice_number"))).toBe(true);
+  });
+});
+
+describe("cloud SQL backup", () => {
+  it("emits a self-contained upsert script that escapes quotes", () => {
+    const sql = cloudDumpToSql({
+      exportedAt: "2026-08-21T06:00:00.000Z",
+      schemaSql: "create table if not exists public.sync_records (entity_id text);",
+      businesses: [{ id: "biz-rest", code: "BUS003", name: "G.V Cloudy Kitchen", type: "RESTAURANT", email: "a@b.c" }],
+      syncRecords: [
+        {
+          entity_type: "invoice",
+          entity_id: "inv-1",
+          operation: "CREATE",
+          payload: { notes: "It's paid", name: "O'Brien" },
+          device_id: "dev-1",
+          updated_at: "2026-08-21T06:00:00.000Z",
+        },
+      ],
+    });
+    expect(sql).toContain("BEGIN;");
+    expect(sql).toContain("COMMIT;");
+    expect(sql).toContain("create table if not exists public.sync_records");
+    expect(sql).toContain("on conflict (entity_type, entity_id) do update");
+    expect(sql).toContain("It''s paid");
+    expect(sql).toContain("O''Brien");
+    expect(sql).toContain("biz-rest");
   });
 });
 
@@ -317,7 +363,7 @@ describe("stay CRUD", () => {
       customer_id: guest.id,
       room_id: room.id,
       check_in: "2026-08-25",
-      check_out: "2026-08-27",
+      check_out: "2026-08-28",
       adults: 2,
       children: 0,
       rate_paise: 280000,
@@ -329,15 +375,19 @@ describe("stay CRUD", () => {
         customer_id: guest.id,
         room_id: room.id,
         check_in: "2026-08-26",
-        check_out: "2026-08-28",
+        check_out: "2026-08-29",
         adults: 1,
         children: 0,
         rate_paise: 280000,
       }),
     ).toThrow(/already booked/);
-    s.updateBooking(booking.id, { check_out: "2026-08-28", rate_paise: 300000 });
+    s.updateBooking(booking.id, { check_out: "2026-08-27", rate_paise: 300000 });
     expect(s.state.bookings.find((b) => b.id === booking.id)?.rate_paise).toBe(300000);
-    expect(s.state.bookings.find((b) => b.id === booking.id)?.total_paise).toBe(900000);
+    expect(s.state.bookings.find((b) => b.id === booking.id)?.total_paise).toBe(600000);
+    expect(() => s.updateBooking(booking.id, { check_out: "2026-08-28" })).toThrow(/shortened/);
+    s.updateBooking(booking.id, { total_paise: 500000 });
+    expect(s.state.bookings.find((b) => b.id === booking.id)?.total_paise).toBe(500000);
+    expect(s.state.bookings.find((b) => b.id === booking.id)?.check_out).toBe("2026-08-27");
     s.checkIn(booking.id);
     expect(s.state.rooms.find((r) => r.id === room.id)?.status).toBe("OCCUPIED");
     expect(() => s.deleteCustomer(guest.id)).toThrow(/active booking/);

@@ -31,7 +31,7 @@ export const HOME_SEO: PublicSeo = {
   path: "/",
   title: "Stay, Restaurant & Car Rental in Vattavada, Munnar | Cloudy Group",
   description:
-    "Cloudy Group in Vattavada, Munnar (PIN 685505): G.V Cloudy Glenn cottages, G.V Royal Residency at Koviloor, G.V Cloudy Kitchen in Urkadu, and Cloudy Drives car rental — self-drive or with driver.",
+    "Cloudy Group in Vattavada, Munnar (PIN 685505): G.V Cloudy Glenn cottages, G.V Royal Residency at Koviloor, G.V Cloudy Kitchen in Urkadu, and Guru Travels car rental — self-drive or with driver.",
   ogImage: "/logo.jpeg",
   ogImageAlt: "Cloudy Group — restaurants, stays, and tents in Vattavada",
 };
@@ -51,7 +51,7 @@ export function siteSeo(site: PublicSite): PublicSeo {
     "royal-residency": {
       title: "Hotel Stay near Koviloor Bus Stand, Munnar | G.V Royal Residency",
       description:
-        "G.V Royal Residency is a budget stay at Koviloor Bus Stand, Munnar — close to Vattavada viewpoints. Twin and single rooms, PIN 685505. Meals at G.V Cloudy Kitchen. Car rental via Cloudy Drives.",
+        "G.V Royal Residency is a budget stay at Koviloor Bus Stand, Munnar — close to Vattavada viewpoints. Twin and single rooms, PIN 685505. Meals at G.V Cloudy Kitchen. Car rental via Guru Travels.",
     },
     "cloudy-glenn": {
       title: "Resort in Vattavada, Munnar | G.V Cloudy Glenn Cottages",
@@ -64,9 +64,9 @@ export function siteSeo(site: PublicSite): PublicSeo {
         "G.V Cloudy Kitchen in Urkadu, Vattavada — Indian, Arabic and Chinese meals, breakfast through dinner, delivery in Vattavada. PIN 685505. Halal kitchen next to Cloudy Group stays.",
     },
     "car-rental": {
-      title: "Car Rental in Vattavada, Munnar | Self Drive & With Driver | Cloudy Drives",
+      title: "Car Rental in Vattavada, Munnar | Self Drive & With Driver | Guru Travels",
       description:
-        "Car rental in Vattavada and Munnar: self-drive and chauffeur cars, local sightseeing, Kochi and Coimbatore airport pickup. Book with Cloudy Drives for G.V stays. PIN 685505.",
+        "Car rental in Vattavada and Munnar: self-drive and chauffeur cars, local sightseeing, Kochi and Coimbatore airport pickup. Book with Guru Travels for G.V stays. PIN 685505.",
     },
   };
   const extra = pages[site.slug] ?? { title: `${site.name} | ${REGION}`, description: site.description };
@@ -103,7 +103,7 @@ export function publicMetadata(page: PublicSeo): Metadata {
       "G.V Cloudy Glenn",
       "G.V Royal Residency",
       "G.V Cloudy Kitchen",
-      "Cloudy Drives",
+      "Guru Travels",
       "Idukki 685505",
     ],
     alternates: { canonical: url },
@@ -169,7 +169,7 @@ export function organizationJsonLd() {
       { "@type": "LodgingBusiness", name: SITE_CONTACTS.glenn.name, url: absoluteUrl("/cloudy-glenn") },
       { "@type": "LodgingBusiness", name: SITE_CONTACTS.royal.name, url: absoluteUrl("/royal-residency") },
       { "@type": "Restaurant", name: SITE_CONTACTS.kitchen.name, url: absoluteUrl("/cloudy-kitchen") },
-      { "@type": "AutoRental", name: "Cloudy Drives", url: absoluteUrl("/car-rental") },
+      { "@type": "AutoRental", name: "Guru Travels", url: absoluteUrl("/car-rental") },
     ],
   };
 }
@@ -283,6 +283,11 @@ export const PUBLIC_PATHS = [
   "/cloudy-kitchen",
   "/menu",
 ] as const;
+
+export function isPublicChromePath(path: string) {
+  if (path === "/" || path === "/login" || path.startsWith("/login/")) return true;
+  return PUBLIC_PATHS.some((p) => p !== "/" && (path === p || path.startsWith(`${p}/`)));
+}
 
 export const STAFF_ROBOTS_DISALLOW = [
   "/login",

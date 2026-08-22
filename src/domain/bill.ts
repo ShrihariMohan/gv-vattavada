@@ -76,8 +76,9 @@ export function billFromOrder(state: AppState, orderId: string, discountPaise = 
   const business = state.businesses.find((b) => b.id === order.business_id);
   if (!business) throw new Error("Business not found");
   const items = state.orderItems.filter((i) => i.order_id === orderId && !i.deleted_at);
+  const taxBps = (bps: number) => (state.tax_enabled === false ? 0 : bps);
   const snap = computeInvoiceSnapshot(
-    items.map((i) => ({ qty: i.qty, unit_price_paise: i.unit_price_paise, tax_bps: i.tax_bps })),
+    items.map((i) => ({ qty: i.qty, unit_price_paise: i.unit_price_paise, tax_bps: taxBps(i.tax_bps) })),
     discountPaise,
     0,
   );
@@ -119,8 +120,9 @@ export function invoiceForOrder(state: AppState, orderId: string) {
 
 export function orderChargePaise(state: AppState, orderId: string): number {
   const items = state.orderItems.filter((i) => i.order_id === orderId && !i.deleted_at);
+  const taxBps = (bps: number) => (state.tax_enabled === false ? 0 : bps);
   return computeInvoiceSnapshot(
-    items.map((i) => ({ qty: i.qty, unit_price_paise: i.unit_price_paise, tax_bps: i.tax_bps })),
+    items.map((i) => ({ qty: i.qty, unit_price_paise: i.unit_price_paise, tax_bps: taxBps(i.tax_bps) })),
     0,
     0,
   ).total_paise;

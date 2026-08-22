@@ -340,10 +340,12 @@ function PosInner() {
                     onChange={(e) => setDiscount(Math.round(Number(e.target.value) * 100))}
                   />
                 </div>
+                {service.state.tax_enabled !== false && (
                 <div className="flex justify-between">
                   <span>Tax</span>
                   <Money paise={totals.tax_paise} />
                 </div>
+                )}
                 <div className="flex justify-between font-semibold">
                   <span>Total</span>
                   <Money paise={totals.total_paise} />
@@ -439,10 +441,12 @@ function PosInner() {
                   <span>Subtotal</span>
                   <Money paise={totals.subtotal_paise} />
                 </div>
+                {service.state.tax_enabled !== false && (
                 <div className="flex justify-between">
                   <span>Tax</span>
                   <Money paise={totals.tax_paise} />
                 </div>
+                )}
                 <div className="flex justify-between font-semibold">
                   <span>Total</span>
                   <Money paise={totals.total_paise} />
@@ -559,7 +563,15 @@ function PosInner() {
                 onChange={(e) => setDiscount(Math.round(Number(e.target.value) * 100))}
               />
               <p className="text-xs text-muted-foreground">
-                Tax <Money paise={totals.tax_paise} /> · Total <Money paise={totals.total_paise} />
+                {service.state.tax_enabled !== false ? (
+                  <>
+                    Tax <Money paise={totals.tax_paise} /> · Total <Money paise={totals.total_paise} />
+                  </>
+                ) : (
+                  <>
+                    Total <Money paise={totals.total_paise} />
+                  </>
+                )}
               </p>
             </div>
           )}

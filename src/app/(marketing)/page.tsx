@@ -19,7 +19,7 @@ export default function HomePage() {
         Stays, kitchen, and car rental in Vattavada.
       </h1>
       <p className="mt-6 max-w-xl text-lg text-muted-foreground">
-        Cloudy Group in Vattavada, Munnar (PIN 685505): G.V Royal Residency at Koviloor, G.V Cloudy Glenn on the hillside, G.V Cloudy Kitchen at Urkadu, and Cloudy Drives for self-drive or chauffeur cars.
+        Cloudy Group in Vattavada, Munnar (PIN 685505): G.V Royal Residency at Koviloor, G.V Cloudy Glenn on the hillside, G.V Cloudy Kitchen at Urkadu, and Guru Travels for self-drive or chauffeur cars.
       </p>
       <div className="mt-14 grid gap-5 md:grid-cols-2">
         {PUBLIC_SITES.map((s) => (

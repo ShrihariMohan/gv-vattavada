@@ -54,7 +54,7 @@ export function BillSheet({ bill, className }: { bill: BillView; className?: str
       <div className="mt-3 space-y-0.5 text-sm">
         <Row label="Subtotal" value={bill.subtotal} />
         <Row label="Discount" value={bill.discount} />
-        <Row label="Tax" value={bill.tax} />
+        {bill.tax !== "₹0.00" && <Row label="Tax" value={bill.tax} />}
         <Row label="Total" value={bill.total} strong />
         <p className="pt-1 text-xs text-[#444]">
           {bill.paymentMethod} · {bill.paymentStatus}

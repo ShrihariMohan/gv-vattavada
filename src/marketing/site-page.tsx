@@ -87,7 +87,7 @@ export function SitePage({ site }: { site: PublicSite }) {
         </section>
       ) : (
         <section className="mt-16">
-          <h2 className="font-heading text-3xl">{rental ? "Car rental options" : "Stay options"}</h2>
+          <h2 className="font-heading text-3xl">{rental ? "Cars" : "Stay options"}</h2>
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             {site.offerings.map((o, i) => (
               <div key={o.title} className="rounded-2xl border bg-card p-5">
@@ -106,7 +106,7 @@ export function SitePage({ site }: { site: PublicSite }) {
       ) : (
         site.gallery.length > 0 && (
           <section className="mt-16" id="gallery">
-            <h2 className="font-heading text-3xl">Photos</h2>
+            <h2 className="font-heading text-3xl">{rental ? "Fleet" : "Photos"}</h2>
             <div className="mt-6 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
               {stills.map((item) => (
                 <SiteMediaCard key={item.src} item={item} />

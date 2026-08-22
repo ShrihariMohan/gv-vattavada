@@ -91,6 +91,7 @@ export function emptyState(deviceId: string): AppState {
     currentUserId: null,
     currentDeviceId: deviceId,
     online: true,
+    tax_enabled: true,
   };
 }
 
@@ -470,6 +471,16 @@ export class AppService {
     return product;
   }
 
+  setTaxEnabled(enabled: boolean) {
+    this.require("products.edit");
+    this.state.tax_enabled = enabled;
+    this.audit("settings.tax", "product", "tax_enabled", !enabled, enabled);
+  }
+
+  private taxBps(bps: number) {
+    return this.state.tax_enabled === false ? 0 : bps;
+  }
+
   updateDailyClosing(closingId: string, actualCashPaise: number): DailyClosing {
     this.require("day.close");
     const closing = this.state.dailyClosings.find((c) => c.id === closingId);
@@ -581,7 +592,7 @@ export class AppService {
   orderTotals(orderId: string, discountPaise: Paise = 0) {
     const items = this.state.orderItems.filter((i) => i.order_id === orderId && !i.deleted_at);
     return computeInvoiceSnapshot(
-      items.map((i) => ({ qty: i.qty, unit_price_paise: i.unit_price_paise, tax_bps: i.tax_bps })),
+      items.map((i) => ({ qty: i.qty, unit_price_paise: i.unit_price_paise, tax_bps: this.taxBps(i.tax_bps) })),
       discountPaise,
       0,
     );
@@ -600,7 +611,7 @@ export class AppService {
     const items = this.state.orderItems.filter((i) => i.order_id === order.id && !i.deleted_at);
     if (!items.length) throw new Error("Cannot bill an empty order");
     const snap = computeInvoiceSnapshot(
-      items.map((i) => ({ qty: i.qty, unit_price_paise: i.unit_price_paise, tax_bps: i.tax_bps })),
+      items.map((i) => ({ qty: i.qty, unit_price_paise: i.unit_price_paise, tax_bps: this.taxBps(i.tax_bps) })),
       opts.discount_paise ?? 0,
       opts.payments.reduce((a, p) => a + p.amount_paise, 0),
     );
@@ -813,6 +824,7 @@ export class AppService {
       adults?: number;
       children?: number;
       rate_paise?: number;
+      total_paise?: number;
       notes?: string;
     },
   ): Booking {
@@ -831,7 +843,9 @@ export class AppService {
     if (room.business_id !== b.business_id) throw new Error("Room belongs to another property");
     const checkInAt = input.check_in ?? b.check_in;
     const checkOutAt = input.check_out ?? b.check_out;
-    daysBetween(checkInAt, checkOutAt);
+    const oldNights = daysBetween(b.check_in, b.check_out);
+    const newNights = daysBetween(checkInAt, checkOutAt);
+    if (newNights > oldNights) throw new Error("Stay can only be shortened, not extended");
     this.assertRoomFree(roomId, checkInAt, checkOutAt, b.id);
     const oldRoomId = b.room_id;
     b.customer_id = customerId;
@@ -842,22 +856,42 @@ export class AppService {
     b.children = input.children ?? b.children;
     b.rate_paise = input.rate_paise ?? b.rate_paise;
     b.notes = input.notes ?? b.notes;
-    const totals = bookingTotals({
-      check_in: b.check_in,
-      check_out: b.check_out,
-      rate_paise: b.rate_paise,
-      extra_charges_paise: b.extra_charges_paise,
-      food_paise: b.food_paise,
-      extra_bed_paise: b.extra_bed_paise,
-      activities_paise: b.activities_paise,
-      other_income_paise: b.other_income_paise,
-      discount_paise: b.discount_paise,
-      tax_bps: 0,
-      paid_paise: b.paid_paise,
-    });
-    b.tax_paise = totals.tax_paise;
-    b.total_paise = totals.total_paise;
-    b.balance_paise = totals.balance_amount_paise;
+    if (input.total_paise !== undefined) {
+      if (!Number.isInteger(input.total_paise) || input.total_paise < 0) throw new Error("Total must be integer paise");
+      if (input.total_paise < b.paid_paise) throw new Error("Total cannot be less than amount already paid");
+      const roomCharge = b.rate_paise * newNights;
+      const locked = b.food_paise + b.extra_bed_paise + b.activities_paise;
+      const floor = roomCharge + locked;
+      if (input.total_paise <= floor) {
+        b.extra_charges_paise = 0;
+        b.other_income_paise = 0;
+        b.discount_paise = floor - input.total_paise;
+      } else {
+        b.discount_paise = 0;
+        b.other_income_paise = 0;
+        b.extra_charges_paise = input.total_paise - floor;
+      }
+      b.tax_paise = 0;
+      b.total_paise = input.total_paise;
+      b.balance_paise = input.total_paise - b.paid_paise;
+    } else {
+      const totals = bookingTotals({
+        check_in: b.check_in,
+        check_out: b.check_out,
+        rate_paise: b.rate_paise,
+        extra_charges_paise: b.extra_charges_paise,
+        food_paise: b.food_paise,
+        extra_bed_paise: b.extra_bed_paise,
+        activities_paise: b.activities_paise,
+        other_income_paise: b.other_income_paise,
+        discount_paise: b.discount_paise,
+        tax_bps: 0,
+        paid_paise: b.paid_paise,
+      });
+      b.tax_paise = totals.tax_paise;
+      b.total_paise = totals.total_paise;
+      b.balance_paise = totals.balance_amount_paise;
+    }
     this.stamp(b);
     if (oldRoomId !== roomId) {
       this.refreshRoomOccupancy(oldRoomId);
@@ -950,9 +984,21 @@ export class AppService {
     if (b.food_paise) lines.push({ name: "Food", qty: 1, unit_price_paise: b.food_paise, amount_paise: b.food_paise });
     if (b.extra_bed_paise) lines.push({ name: "Extra bed", qty: 1, unit_price_paise: b.extra_bed_paise, amount_paise: b.extra_bed_paise });
     if (b.extra_charges_paise) lines.push({ name: "Extra charges", qty: 1, unit_price_paise: b.extra_charges_paise, amount_paise: b.extra_charges_paise });
+    const lineSum = lines.reduce((a, l) => a + l.amount_paise, 0);
+    let discount = b.discount_paise;
+    if (lineSum > b.total_paise) discount = lineSum - b.total_paise;
+    else if (lineSum < b.total_paise) {
+      lines.push({
+        name: "Adjustment",
+        qty: 1,
+        unit_price_paise: b.total_paise - lineSum,
+        amount_paise: b.total_paise - lineSum,
+      });
+      discount = 0;
+    }
     const snap = computeInvoiceSnapshot(
       lines.map((l) => ({ qty: l.qty, unit_price_paise: l.unit_price_paise, tax_bps: 0 })),
-      b.discount_paise,
+      discount,
       b.paid_paise,
     );
     const invoice: Invoice = {
@@ -1212,10 +1258,29 @@ export class AppService {
 
   analytics(from: string, to: string, businessId?: string) {
     const issued = this.state.invoices.filter(
-      (i) => i.status === "ISSUED" && i.business_date >= from && i.business_date <= to && (!businessId || i.business_id === businessId),
+      (i) =>
+        !i.deleted_at &&
+        i.status === "ISSUED" &&
+        i.business_date >= from &&
+        i.business_date <= to &&
+        (!businessId || i.business_id === businessId),
     );
-    const expenses = this.state.expenses.filter((e) => e.business_date >= from && e.business_date <= to && (!businessId || e.business_id === businessId));
-    const revenue = issued.reduce((a, i) => a + i.total_paise, 0);
+    const invoicedBookings = new Set(this.state.invoices.filter((i) => i.booking_id && !i.deleted_at && i.status === "ISSUED").map((i) => i.booking_id));
+    const stayRevenue = this.state.bookings
+      .filter(
+        (b) =>
+          !b.deleted_at &&
+          b.status === "CHECKED_OUT" &&
+          b.check_out >= from &&
+          b.check_out <= to &&
+          (!businessId || b.business_id === businessId) &&
+          !invoicedBookings.has(b.id),
+      )
+      .reduce((a, b) => a + b.total_paise, 0);
+    const expenses = this.state.expenses.filter(
+      (e) => !e.deleted_at && e.business_date >= from && e.business_date <= to && (!businessId || e.business_id === businessId),
+    );
+    const revenue = issued.reduce((a, i) => a + i.total_paise, 0) + stayRevenue;
     const expense = expenses.reduce((a, e) => a + e.amount_paise, 0);
     const byDate: Record<string, number> = {};
     const byMonth: Record<string, number> = {};
@@ -1225,11 +1290,25 @@ export class AppService {
       byMonth[monthKey(i.business_date)] = (byMonth[monthKey(i.business_date)] ?? 0) + i.total_paise;
       byYear[yearKey(i.business_date)] = (byYear[yearKey(i.business_date)] ?? 0) + i.total_paise;
     }
+    const stayRows = this.state.bookings.filter(
+      (b) =>
+        !b.deleted_at &&
+        b.status === "CHECKED_OUT" &&
+        b.check_out >= from &&
+        b.check_out <= to &&
+        (!businessId || b.business_id === businessId) &&
+        !invoicedBookings.has(b.id),
+    );
+    for (const b of stayRows) {
+      byDate[b.check_out] = (byDate[b.check_out] ?? 0) + b.total_paise;
+      byMonth[monthKey(b.check_out)] = (byMonth[monthKey(b.check_out)] ?? 0) + b.total_paise;
+      byYear[yearKey(b.check_out)] = (byYear[yearKey(b.check_out)] ?? 0) + b.total_paise;
+    }
     return {
       revenue,
       expenses: expense,
       profit: profit(revenue, expense),
-      transactions: issued.length,
+      transactions: issued.length + stayRows.length,
       byDate,
       byMonth,
       byYear,

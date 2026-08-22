@@ -5,7 +5,8 @@ import { Money } from "@/ui/Shell";
 import { StatusBadge } from "@/ui/status-badge";
 import { useApp } from "@/ui/AppProvider";
 import { rupeesToPaise } from "@/domain/money";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,17 +18,14 @@ const selectCls = "h-8 w-full max-w-lg rounded-lg border border-input bg-backgro
 
 export default function CheckPage() {
   const { service, refresh } = useApp();
-  const bookings = useMemo(
-    () =>
-      service.state.bookings
-        .filter((b) => !b.deleted_at)
-        .slice()
-        .sort((a, b) => {
-          const rank = (s: string) => (s === "CHECKED_IN" ? 0 : s === "RESERVED" || s === "ENQUIRY" ? 1 : 2);
-          return rank(a.status) - rank(b.status) || b.check_in.localeCompare(a.check_in);
-        }),
-    [service.state.bookings],
-  );
+  const router = useRouter();
+  const bookings = service.state.bookings
+    .filter((b) => !b.deleted_at)
+    .slice()
+    .sort((a, b) => {
+      const rank = (s: string) => (s === "CHECKED_IN" ? 0 : s === "RESERVED" || s === "ENQUIRY" ? 1 : 2);
+      return rank(a.status) - rank(b.status) || b.check_in.localeCompare(a.check_in);
+    });
   const [id, setId] = useState(bookings.find((b) => b.status === "RESERVED" || b.status === "CHECKED_IN")?.id ?? bookings[0]?.id ?? "");
 
   useEffect(() => {
@@ -165,7 +163,7 @@ export default function CheckPage() {
                       try {
                         const inv = service.generateStayInvoice(b.id);
                         refresh();
-                        location.href = `/invoices/${inv.id}`;
+                        router.push(`/invoices/${inv.id}`);
                       } catch (er) {
                         toast.error(er instanceof Error ? er.message : "Failed");
                       }
@@ -183,7 +181,7 @@ export default function CheckPage() {
                   try {
                     const inv = service.generateStayInvoice(b.id);
                     refresh();
-                    location.href = `/invoices/${inv.id}`;
+                    router.push(`/invoices/${inv.id}`);
                   } catch (er) {
                     toast.error(er instanceof Error ? er.message : "Failed");
                   }

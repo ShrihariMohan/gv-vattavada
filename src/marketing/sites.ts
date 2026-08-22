@@ -1,4 +1,4 @@
-import { GLENN_MEDIA, KITCHEN_MEDIA, ROYAL_MEDIA, SITE_CONTACTS, type SiteMedia } from "@/marketing/media";
+import { GLENN_MEDIA, GURU_TRAVELS_MEDIA, KITCHEN_MEDIA, ROYAL_MEDIA, SITE_CONTACTS, type SiteMedia } from "@/marketing/media";
 
 export type SiteTone = "royal" | "glenn" | "kitchen" | "rental";
 
@@ -47,7 +47,7 @@ export const PUBLIC_SITES: PublicSite[] = [
       { title: "Single room", detail: "One bed · extra mattress under the frame", price: "Ask for tonight" },
       { title: "Family stay", detail: "Combine rooms for a group", price: "Ask for tonight" },
     ],
-    notes: ["PIN 685505 for all G.V properties.", "Car rental via Cloudy Drives on request."],
+    notes: ["PIN 685505 for all G.V properties.", "Car rental via Guru Travels on request."],
   },
   {
     slug: "cloudy-glenn",
@@ -105,27 +105,27 @@ export const PUBLIC_SITES: PublicSite[] = [
   },
   {
     slug: "car-rental",
-    name: "Cloudy Drives",
+    name: "Guru Travels",
     kicker: "Car rental · Vattavada & Munnar",
-    tagline: "Car rental in Vattavada for the hill roads.",
+    tagline: "Self-drive and chauffeur cars for the hill roads.",
     description:
-      "Cloudy Drives is car rental in Vattavada and Munnar — self-drive or with driver, local sightseeing, and Kochi / Coimbatore airport pickup for guests of G.V Royal Residency and G.V Cloudy Glenn.",
+      "Guru Travels is car rental in Vattavada and Munnar — self-drive or with driver, local sightseeing, and Kochi / Coimbatore airport pickup for guests of G.V Royal Residency and G.V Cloudy Glenn.",
     tone: "rental",
     location: `Based in Vattavada, Munnar · PIN 685505 · pickup by arrangement`,
     phones: [...SITE_CONTACTS.royal.phones],
-    email: "drives@cloudydrives.local",
+    email: "travels@gurutravels.local",
     hours: "Bookings 6:00 AM – 9:00 PM",
     heroCta: "Request a car",
-    hero: null,
-    gallery: [],
+    hero: GURU_TRAVELS_MEDIA[0],
+    gallery: GURU_TRAVELS_MEDIA,
     highlights: [
       { title: "Stay-linked pickup", body: "Collect from either property or Kochi / Coimbatore." },
-      { title: "Self-drive or chauffeur", body: "Licence rules and driver hours on request." },
+      { title: "Self-drive or chauffeur", body: "Swift and Baleno manuals, or a driver for the ghats." },
       { title: "Clear day rates", body: "Km limit, fuel, and night halt — ask when you book." },
     ],
     offerings: [
-      { title: "Compact hatch", detail: "4 seats", price: "Ask for the day" },
-      { title: "SUV", detail: "6–7 seats", price: "Ask for the day" },
+      { title: "Swift · manual", detail: "4 seats · self-drive hatch", price: "Ask for the day" },
+      { title: "Baleno · diesel manual", detail: "5 seats · hill-road diesel", price: "Ask for the day" },
       { title: "With driver", detail: "Local / outstation", price: "Ask for the day" },
     ],
     notes: ["Documents, deposit, and insurance on booking.", "PIN 685505."],

@@ -368,4 +368,6 @@ export interface AppState {
   currentUserId: string | null;
   currentDeviceId: string;
   online: boolean;
+  /** When false, product tax rates are ignored on POS totals, bills, and invoices. */
+  tax_enabled: boolean;
 }

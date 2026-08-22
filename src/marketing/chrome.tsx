@@ -48,7 +48,7 @@ export function MarketingFooter() {
           <BrandLogo height={36} className="max-h-9 opacity-90" />
           <p>Vattavada · Munnar · Idukki · PIN 685505</p>
         </div>
-        <p>G.V Royal Residency · G.V Cloudy Glenn · G.V Cloudy Kitchen · Cloudy Drives</p>
+        <p>G.V Royal Residency · G.V Cloudy Glenn · G.V Cloudy Kitchen · Guru Travels</p>
       </div>
     </footer>
   );

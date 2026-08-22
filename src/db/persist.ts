@@ -90,6 +90,7 @@ export function normalizeState(state: AppState): AppState {
     if (!state.users.some((x) => x.username === u.username)) state.users.push(u);
   }
   state.lastPulledAt ??= null;
+  state.tax_enabled ??= true;
   remintDuplicateIds(state);
   return state;
 }
@@ -113,6 +114,7 @@ const TRANSACTION_KEYS = [
 export function mergeLocalSafety(base: AppState, local: AppState) {
   base.syncQueue = local.syncQueue ?? [];
   base.currentUserId = local.currentUserId;
+  if (typeof local.tax_enabled === "boolean") base.tax_enabled = local.tax_enabled;
   for (const key of TRANSACTION_KEYS) {
     const rows = local[key] as { id: string; sync_status?: string; updated_at?: string }[];
     const dest = base[key] as { id: string; sync_status?: string; updated_at?: string }[];

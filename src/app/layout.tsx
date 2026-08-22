@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     template: "%s",
   },
   description:
-    "Cloudy Group in Vattavada, Munnar (PIN 685505): hillside stays, G.V Cloudy Kitchen, and Cloudy Drives car rental — self-drive or with driver.",
+    "Cloudy Group in Vattavada, Munnar (PIN 685505): hillside stays, G.V Cloudy Kitchen, and Guru Travels car rental — self-drive or with driver.",
   applicationName: "Cloudy Group",
   manifest: "/manifest.webmanifest",
   icons: {

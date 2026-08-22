@@ -7,7 +7,7 @@ import { useApp } from "@/ui/AppProvider";
 import { can } from "@/domain/rules";
 import { paiseToRupees, rupeesToPaise } from "@/domain/money";
 import type { Booking } from "@/domain/types";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,12 +34,10 @@ export default function BookingsPage() {
     if (id) setGuestFilter(id);
   }, []);
 
-  const rows = useMemo(() => {
-    return service.state.bookings
-      .filter((b) => !b.deleted_at && (!guestFilter || b.customer_id === guestFilter))
-      .slice()
-      .sort((a, b) => b.check_in.localeCompare(a.check_in));
-  }, [service.state.bookings, guestFilter]);
+  const rows = service.state.bookings
+    .filter((b) => !b.deleted_at && (!guestFilter || b.customer_id === guestFilter))
+    .slice()
+    .sort((a, b) => b.check_in.localeCompare(a.check_in));
 
   const guestName = (id: string) => guests.find((c) => c.id === id)?.name ?? "Guest";
   const roomNo = (id: string) => rooms.find((r) => r.id === id)?.number ?? "—";
@@ -191,6 +189,7 @@ export default function BookingsPage() {
                 adults: data.adults,
                 children: data.children,
                 rate_paise: data.rate_paise,
+                total_paise: data.total_paise,
                 notes: data.notes,
               });
               toast.success("Booking updated", { description: "Queued for sync" });
@@ -244,6 +243,7 @@ function BookingDialog({
     adults: number;
     children: number;
     rate_paise: number;
+    total_paise?: number;
     paid_paise?: number;
     notes?: string;
     newGuest?: { name: string; phone: string; email?: string };
@@ -277,6 +277,7 @@ function BookingDialog({
               adults: Number(fd.get("adults")),
               children: Number(fd.get("children") || 0),
               rate_paise: rupeesToPaise(Number(fd.get("rate_rupees"))),
+              total_paise: booking ? rupeesToPaise(Number(fd.get("total_rupees"))) : undefined,
               paid_paise: booking ? undefined : rupeesToPaise(Number(fd.get("paid_rupees") || 0)),
               notes: String(fd.get("notes") ?? ""),
               newGuest: customerId === "new" ? { name: newName, phone: newPhone, email: String(fd.get("guest_email") ?? "") } : undefined,
@@ -349,6 +350,9 @@ function BookingDialog({
             <div className="grid gap-1">
               <Label>Check-out</Label>
               <Input name="check_out" type="date" required defaultValue={booking?.check_out} />
+              {booking && (
+                <p className="text-xs text-muted-foreground">You can shorten the stay, not add nights.</p>
+              )}
             </div>
             <div className="grid gap-1">
               <Label>Adults</Label>
@@ -372,6 +376,18 @@ function BookingDialog({
               <div className="grid gap-1">
                 <Label>Advance paid (₹)</Label>
                 <Input name="paid_rupees" type="number" min={0} step="0.01" defaultValue={0} />
+              </div>
+            )}
+            {booking && (
+              <div className="grid gap-1">
+                <Label>Total (₹)</Label>
+                <Input
+                  name="total_rupees"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  defaultValue={paiseToRupees(booking.total_paise)}
+                />
               </div>
             )}
           </div>

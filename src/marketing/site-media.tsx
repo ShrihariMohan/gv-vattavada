@@ -18,6 +18,9 @@ export function SiteMediaCard({
           controls
           preload="metadata"
           playsInline
+          muted={item.src.includes("guru-travels")}
+          autoPlay={item.src.includes("guru-travels")}
+          loop={item.src.includes("guru-travels")}
           aria-label={item.alt}
         >
           <source src={item.src} type="video/mp4" />

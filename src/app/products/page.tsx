@@ -36,19 +36,41 @@ export default function ProductsPage() {
       title="Products"
       description="Tag items for POS and the public menu. A dish can have several tags; filters pick one tag at a time."
       actions={
-        canEdit ? (
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setOpen(true);
-            }}
-          >
-            Add product
-          </Button>
-        ) : null
+        <div className="flex flex-wrap items-center gap-2">
+          {canEdit && (
+            <label className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={service.state.tax_enabled !== false}
+                onChange={(e) => {
+                  service.setTaxEnabled(e.target.checked);
+                  refresh();
+                  toast.success(e.target.checked ? "Tax will be added on bills" : "Tax is off for all bills");
+                }}
+              />
+              Collect tax
+            </label>
+          )}
+          {canEdit ? (
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setOpen(true);
+              }}
+            >
+              Add product
+            </Button>
+          ) : null}
+        </div>
       }
     >
       <div className="mb-4 grid gap-3">
+        {service.state.tax_enabled === false && (
+          <p className="rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground">
+            Tax is disabled. POS bills, totals, and invoices use the item price only.
+          </p>
+        )}
         <Input placeholder="Search name or tag" value={query} onChange={(e) => setQuery(e.target.value)} />
         <TagFilter selected={tag} onChange={setTag} />
       </div>
