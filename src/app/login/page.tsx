@@ -68,9 +68,6 @@ export default function LoginPage() {
             <Button type="submit" className="mt-1 w-full">
               Sign in
             </Button>
-            <p className="text-xs text-muted-foreground">
-              admin/admin123 · manager/manager123 · staff/staff123 · kitchen.manager/kitchen123 · kitchen.staff/kstaff123 · stay.manager/stay123 · stay.staff/sstaff123
-            </p>
             <Link href="/" className="text-center text-xs text-primary underline-offset-4 hover:underline">
               Back to public sites
             </Link>
