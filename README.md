@@ -11,7 +11,7 @@ npm test
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Staff login: `admin` / `admin123`. Also `manager`, `staff` (restaurant), `kitchen.manager` / `kitchen123`, `kitchen.staff` / `kstaff123`, `stay.manager` / `stay123`, `stay.staff` / `sstaff123`.
+Open [http://localhost:3000](http://localhost:3000). Staff usernames: `admin`, `manager`, `staff`, `kitchen.manager`, `kitchen.staff`, `stay.manager`, `stay.staff`. Passwords are in `src/domain/seed-logins.ts` (not shown on the public site or login form).
 
 Install as a PWA from the browser (Add to Home Screen). Public pages and the staff shell stay available offline after a first visit. After an app update, use **Settings → Unregister / Re-register** if a stale service worker is serving old JS (IndexedDB is not cleared).
 

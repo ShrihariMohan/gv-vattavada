@@ -33,6 +33,7 @@ import {
   wrapInvoiceLines,
 } from "./rules";
 import { createSeedState } from "./seed";
+import { SEED_PASSWORDS } from "./seed-logins";
 import { AppService, invoicePrintModel, MemorySupabaseAdapter } from "./service";
 import { billFromOrder } from "./bill";
 import type { SyncQueueItem } from "./types";
@@ -40,7 +41,7 @@ import type { SyncQueueItem } from "./types";
 function svc(iso = "2026-08-19T16:00:00.000Z") {
   const state = createSeedState();
   const s = new AppService(state, () => new Date(iso));
-  s.login("admin", "admin123");
+  s.login("admin", SEED_PASSWORDS.admin);
   s.setOnline(false);
   return s;
 }
@@ -344,7 +345,7 @@ describe("R42-R43 closing and shifts", () => {
 describe("R44-R46 users audit permissions", () => {
   it("hashes passwords and enforces roles", () => {
     const s = svc();
-    expect(s.state.users[0].password_hash).not.toBe("admin123");
+    expect(s.state.users[0].password_hash).not.toBe(SEED_PASSWORDS.admin);
     expect(can("STAFF", "analytics.financial")).toBe(false);
     expect(can("STAFF", "pos.create_bill")).toBe(true);
     expect(can("MANAGER", "reports.view")).toBe(true);
@@ -354,7 +355,7 @@ describe("R44-R46 users audit permissions", () => {
     expect(can("RESTAURANT_MANAGER", "day.close")).toBe(true);
     expect(can("STAY_MANAGER", "pos.use")).toBe(false);
     s.logout();
-    s.login("staff", "staff123");
+    s.login("staff", SEED_PASSWORDS.staff);
     expect(() => s.createExpense({ business_id: "biz-rest", category: "Gas", amount_paise: 1, payment_method: "CASH", description: "x" })).toThrow(/Forbidden/);
     const order = s.startOrder({ business_id: "biz-rest" });
     s.addOrderItem(order.id, "p-tea", 1);
@@ -411,5 +412,8 @@ describe("R45 login", () => {
     const state = createSeedState();
     const s = new AppService(state, () => new Date("2026-08-19T16:00:00.000Z"));
     expect(() => s.login("admin", "wrong")).toThrow();
+    expect(() => s.login("admin", "admin123")).toThrow();
+    s.login("admin", SEED_PASSWORDS.admin);
+    expect(s.state.currentUserId).toBe("user-admin");
   });
 });

@@ -54,11 +54,11 @@ export default function LoginPage() {
           >
             <div className="grid gap-1.5">
               <Label htmlFor="username">Username</Label>
-              <Input id="username" name="username" defaultValue="admin" autoComplete="username" />
+              <Input id="username" name="username" autoComplete="username" />
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" defaultValue="admin123" autoComplete="current-password" />
+              <Input id="password" name="password" type="password" autoComplete="current-password" />
             </div>
             {error && (
               <Alert variant="destructive">

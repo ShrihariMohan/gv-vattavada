@@ -86,8 +86,16 @@ export function normalizeState(state: AppState): AppState {
     if (!known.includes(u.role)) u.role = "STAFF";
   }
   const extraUsers = createCatalogState(state.currentDeviceId).users;
-  for (const u of extraUsers) {
-    if (!state.users.some((x) => x.username === u.username)) state.users.push(u);
+  for (const seeded of extraUsers) {
+    const existing = state.users.find((x) => x.username === seeded.username);
+    if (!existing) {
+      state.users.push(seeded);
+      continue;
+    }
+    existing.password_hash = seeded.password_hash;
+    existing.password_salt = seeded.password_salt;
+    existing.role = seeded.role;
+    existing.active = seeded.active;
   }
   state.lastPulledAt ??= null;
   state.tax_enabled ??= true;

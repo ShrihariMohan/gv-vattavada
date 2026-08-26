@@ -25,15 +25,7 @@ Daily closing must be reversible by an authorised manager.
 | `STAY_MANAGER` | Royal Residency / Cloudy Glenn manager | No | Yes | Yes |
 | `STAY_STAFF` | Stay front desk | No | Yes (bookings, check-in) | No |
 
-Seed logins (password hash, never plaintext in the DB):
-
-* `admin` / `admin123`
-* `manager` / `manager123`
-* `staff` / `staff123` (restaurant staff)
-* `kitchen.manager` / `kitchen123`
-* `kitchen.staff` / `kstaff123`
-* `stay.manager` / `stay123`
-* `stay.staff` / `sstaff123`
+Seed logins (password hash, never plaintext in the DB). Usernames: `admin`, `manager`, `staff`, `kitchen.manager`, `kitchen.staff`, `stay.manager`, `stay.staff`. Current passwords live only in `src/domain/seed-logins.ts`.
 
 ## R78 — Supabase configuration, seed, and background sync
 

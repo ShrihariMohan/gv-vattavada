@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createSeedState } from "./seed";
+import { SEED_PASSWORDS } from "./seed-logins";
 import { AppService, MemorySupabaseAdapter } from "./service";
 import { backupCsvFiles, backupToJson, parseBackupJson } from "./backup";
 import { cloudDumpToSql } from "./cloud-backup";
@@ -9,7 +10,7 @@ import { productMatchesQuery, productMatchesSelectedTag, publicMenuItems } from 
 
 function svc(iso = "2026-08-19T16:00:00.000Z") {
   const s = new AppService(createSeedState(), () => new Date(iso));
-  s.login("admin", "admin123");
+  s.login("admin", SEED_PASSWORDS.admin);
   s.setOnline(false);
   return s;
 }
@@ -129,7 +130,7 @@ describe("products and closing edits", () => {
   it("staff cannot edit products", () => {
     const s = svc();
     s.logout();
-    s.login("staff", "staff123");
+    s.login("staff", SEED_PASSWORDS.staff);
     expect(() =>
       s.createProduct({ business_id: "biz-rest", category_id: "cat-3", name: "X", price_paise: 100, tax_bps: 0 }),
     ).toThrow(/Forbidden/);
@@ -165,10 +166,10 @@ describe("R77 stay vs restaurant roles", () => {
   it("blocks kitchen staff from bookings and stay staff from POS", () => {
     const s = svc();
     s.logout();
-    s.login("stay.staff", "sstaff123");
+    s.login("stay.staff", SEED_PASSWORDS["stay.staff"]);
     expect(() => s.startOrder({ business_id: "biz-rest" })).toThrow(/Forbidden/);
     s.logout();
-    s.login("kitchen.staff", "kstaff123");
+    s.login("kitchen.staff", SEED_PASSWORDS["kitchen.staff"]);
     expect(() =>
       s.createBooking({
         business_id: "biz-stay-a",
@@ -310,12 +311,25 @@ describe("cross-device sync ids", () => {
     expect(next.invoices).toEqual([]);
     expect(next.bookings).toEqual([]);
   });
+
+  it("rotates catalog staff passwords when local state still has old hashes", () => {
+    const state = createSeedState();
+    const admin = state.users.find((u) => u.username === "admin")!;
+    admin.password_hash = "stale";
+    admin.password_salt = "old-salt";
+    const next = normalizeState(state);
+    expect(next.users.find((u) => u.username === "admin")?.password_hash).not.toBe("stale");
+    const s = new AppService(next, () => new Date("2026-08-19T16:00:00.000Z"));
+    s.login("admin", SEED_PASSWORDS.admin);
+    expect(s.state.currentUserId).toBe("user-admin");
+  });
+
   it("does not reuse sequential ids across devices and pulls remote orders", async () => {
     const cloud = new MemorySupabaseAdapter();
     const a = new AppService(createSeedState("dev-aaa-aaaaaaaa"), () => new Date("2026-08-19T16:00:00.000Z"));
     const b = new AppService(createSeedState("dev-bbb-bbbbbbbb"), () => new Date("2026-08-19T16:00:00.000Z"));
-    a.login("admin", "admin123");
-    b.login("admin", "admin123");
+    a.login("admin", SEED_PASSWORDS.admin);
+    b.login("admin", SEED_PASSWORDS.admin);
     const o1 = a.startOrder({ business_id: "biz-rest" });
     a.addOrderItem(o1.id, "p-tea", 2);
     const o2 = b.startOrder({ business_id: "biz-rest" });
@@ -337,8 +351,8 @@ describe("cross-device sync ids", () => {
     const cloud = new MemorySupabaseAdapter();
     const a = new AppService(createSeedState("dev-a"), () => new Date("2026-08-21T10:00:00.000Z"));
     const b = new AppService(createSeedState("dev-b"), () => new Date("2026-08-21T10:00:00.000Z"));
-    a.login("admin", "admin123");
-    b.login("admin", "admin123");
+    a.login("admin", SEED_PASSWORDS.admin);
+    b.login("admin", SEED_PASSWORDS.admin);
     expect(b.state.products.find((p) => p.id === "p-parotta")?.price_paise).toBe(1500);
     a.updateProduct("p-parotta", { price_paise: 2000 });
     await a.processSyncQueue(cloud);
