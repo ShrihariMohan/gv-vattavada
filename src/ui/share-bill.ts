@@ -41,13 +41,13 @@ const THERMAL_PRINT_STYLES = `
   .bill-sheet { box-shadow: none !important; max-width: none !important; }
   .bill-sheet img { max-height: 52px; width: auto; margin: 0 auto; display: block; }
   .bill-sheet.thermal {
-    width: 58mm; max-width: 58mm; padding: 2mm; margin: 0 auto;
+    width: 80mm; max-width: 80mm; padding: 2mm; margin: 0 auto;
     font-family: ui-monospace, monospace; font-size: 11px; box-shadow: none;
   }
   .bill-sheet.thermal img { max-height: 32px; }
 `;
 
-/** Print only the bill element (thermal 58mm). Falls back to page print CSS when no target. */
+/** Print only the bill element (thermal 80mm). Falls back to page print CSS when no target. */
 export function printBill(source?: HTMLElement | null) {
   const el =
     source ??

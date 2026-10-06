@@ -110,8 +110,8 @@
     margin-right: auto;
   }
   .bill-sheet.thermal {
-    width: 58mm !important;
-    max-width: 58mm !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
     padding: 2mm !important;
     margin: 0 auto !important;
     font-size: 11px !important;
@@ -133,8 +133,8 @@
   font-family: ui-monospace, monospace;
   font-size: 12px;
 }
-.thermal-58 {
-  width: 58mm;
+.thermal-80 {
+  width: 80mm;
 }
 
 @layer base {

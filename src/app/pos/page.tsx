@@ -5,7 +5,12 @@ import { Money } from "@/ui/Shell";
 import { useApp } from "@/ui/AppProvider";
 import { StatusBadge } from "@/ui/status-badge";
 import { formatINR, rupeesToPaise } from "@/domain/money";
-import { KEYBOARD_SHORTCUTS } from "@/domain/rules";
+import {
+  KEYBOARD_SHORTCUTS,
+  MAX_KEYBOARD_RESULTS,
+  pickVisibleByDigit,
+  type KeyboardDigit,
+} from "@/domain/rules";
 import { billFromInvoice } from "@/domain/bill";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,8 +30,11 @@ import { productMatchesQuery, productMatchesSelectedTag } from "@/marketing/menu
 import { isListedOrder } from "@/domain/bill";
 import { TagFilter } from "@/ui/tag-filter";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 
-const PRIMARY_SHORTCUTS = ["Ctrl+K", "Ctrl+Enter", "Ctrl+N", "Ctrl+Shift+H", "Ctrl+P", "Escape", "Ctrl+/"] as const;
+const PRIMARY_SHORTCUTS = ["Ctrl+K", "1-9", "Enter", "Ctrl+Enter", "Ctrl+N", "Ctrl+Shift+H", "Ctrl+P", "Escape", "Ctrl+/"] as const;
+const KEY_REPEAT_MS = 200;
+const DIGIT_HINT_MS = 30_000;
 
 export default function PosPage() {
   return (
@@ -55,6 +63,9 @@ function PosInner() {
   const [billOpen, setBillOpen] = useState(false);
   const [invoiceId, setInvoiceId] = useState<string | null>(params.get("invoice"));
   const [helpOpen, setHelpOpen] = useState(false);
+  const [lastAddedProductId, setLastAddedProductId] = useState<string | null>(null);
+  const [lastDigitUseAt, setLastDigitUseAt] = useState(0);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const tapLock = useRef(false);
 
   const order = service.state.orders.find((o) => o.id === orderId && !o.deleted_at);
@@ -77,6 +88,9 @@ function PosInner() {
   );
   const totals = orderId ? service.orderTotals(orderId, discount) : null;
   const canEdit = order && order.status !== "PAID" && order.status !== "CANCELLED";
+  const showIndexBadges =
+    q.length > 0 || tag !== null || (lastDigitUseAt > 0 && Date.now() - lastDigitUseAt < DIGIT_HINT_MS);
+  const blockingModal = payOpen || newOpen || editOpen || helpOpen || !!invoiceId || billOpen;
   const invoiceBill = useMemo(() => {
     if (!invoiceId) return null;
     try {
@@ -119,12 +133,78 @@ function PosInner() {
     return o.id;
   };
 
+  const flashHighlight = useCallback((productId: string) => {
+    setHighlightId(productId);
+    window.setTimeout(() => {
+      setHighlightId((current) => (current === productId ? null : current));
+    }, 1500);
+  }, []);
+
+  const keyboardAddOrIncrement = useCallback(
+    (product: { id: string; name: string }) => {
+      if (tapLock.current) return;
+      tapLock.current = true;
+      window.setTimeout(() => {
+        tapLock.current = false;
+      }, KEY_REPEAT_MS);
+      try {
+        if (order?.status === "PAID" || order?.status === "CANCELLED") {
+          toast.error("This ticket is closed. Open a new bill.");
+          return;
+        }
+        const currentQty = qtyByProduct.get(product.id) ?? 0;
+        if (currentQty > 0) {
+          const line = items.find((i) => i.product_id === product.id);
+          if (!line) return;
+          service.setItemQty(line.id, currentQty + 1);
+        } else {
+          let id = orderId;
+          if (!id) {
+            const o = service.startOrder({
+              business_id: restaurant.id,
+              table_id: tableId || null,
+              guest_name: guestName,
+              guest_phone: guestPhone,
+              room_number: roomNumber,
+            });
+            id = o.id;
+            setOrderId(o.id);
+            setDiscount(0);
+            setNewOpen(false);
+          }
+          service.addOrderItem(id, product.id, 1);
+        }
+        refresh();
+        setLastAddedProductId(product.id);
+        setLastDigitUseAt(Date.now());
+        flashHighlight(product.id);
+        toast.success(`${product.name} ×${currentQty + 1}`);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not add item");
+      }
+    },
+    [
+      flashHighlight,
+      guestName,
+      guestPhone,
+      items,
+      order?.status,
+      orderId,
+      qtyByProduct,
+      refresh,
+      restaurant.id,
+      roomNumber,
+      service,
+      tableId,
+    ],
+  );
+
   const addProduct = (productId: string) => {
     if (tapLock.current) return;
     tapLock.current = true;
     window.setTimeout(() => {
       tapLock.current = false;
-    }, 280);
+    }, KEY_REPEAT_MS);
     try {
       let id = orderId;
       if (order?.status === "PAID" || order?.status === "CANCELLED") {
@@ -176,13 +256,44 @@ function PosInner() {
   };
 
   useEffect(() => {
+    if (!lastDigitUseAt) return;
+    const remaining = DIGIT_HINT_MS - (Date.now() - lastDigitUseAt);
+    if (remaining <= 0) return;
+    const timer = window.setTimeout(() => setLastDigitUseAt(0), remaining);
+    return () => window.clearTimeout(timer);
+  }, [lastDigitUseAt]);
+
+  useEffect(() => {
     const mod = (e: KeyboardEvent) => e.metaKey || e.ctrlKey;
+    const searchFocused = document.activeElement?.id === "pos-search";
+
+    const pickByDigit = (digit: KeyboardDigit) => {
+      const product = pickVisibleByDigit(visible, digit);
+      if (!product) {
+        toast.message(`No item ${digit}`);
+        return;
+      }
+      keyboardAddOrIncrement(product);
+    };
+
+    const addFirstVisible = () => {
+      if (!visible.length) {
+        toast.message("No matching items");
+        return;
+      }
+      keyboardAddOrIncrement(visible[0]!);
+    };
+
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       const inField = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
 
       if (e.key === "Escape") {
         e.preventDefault();
+        if (query.trim()) {
+          setQuery("");
+          return;
+        }
         if (helpOpen) {
           setHelpOpen(false);
           return;
@@ -208,6 +319,36 @@ function PosInner() {
           return;
         }
         return;
+      }
+
+      if (searchFocused && !blockingModal && !mod(e)) {
+        const digit = Number(e.key);
+        if (digit >= 1 && digit <= 9) {
+          e.preventDefault();
+          if (!visible.length) {
+            toast.message("No matching items");
+            return;
+          }
+          pickByDigit(digit as KeyboardDigit);
+          return;
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          addFirstVisible();
+          return;
+        }
+        if ((e.key === "+" || e.key === "=") && lastAddedProductId) {
+          e.preventDefault();
+          const product = visible.find((p) => p.id === lastAddedProductId) ?? products.find((p) => p.id === lastAddedProductId);
+          if (product) keyboardAddOrIncrement(product);
+          return;
+        }
+        if ((e.key === "-" || e.key === "_") && lastAddedProductId && canEdit) {
+          e.preventDefault();
+          const qty = qtyByProduct.get(lastAddedProductId) ?? 0;
+          if (qty > 0) bumpQty(lastAddedProductId, qty - 1);
+          return;
+        }
       }
 
       if (inField && !(mod(e) && e.key === "Enter")) return;
@@ -267,7 +408,26 @@ function PosInner() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [orderId, canEdit, items.length, payOpen, invoiceId, helpOpen, editOpen, newOpen, billOpen, holdTicket, closeInvoice]);
+  }, [
+    orderId,
+    canEdit,
+    items.length,
+    payOpen,
+    invoiceId,
+    helpOpen,
+    editOpen,
+    newOpen,
+    billOpen,
+    holdTicket,
+    closeInvoice,
+    query,
+    visible,
+    products,
+    keyboardAddOrIncrement,
+    lastAddedProductId,
+    qtyByProduct,
+    blockingModal,
+  ]);
 
   return (
     <Screen
@@ -312,19 +472,39 @@ function PosInner() {
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
+      <p className="no-print mb-2 hidden text-xs text-muted-foreground sm:block">
+        1–9 add · Enter first · +/− last item
+      </p>
 
       <div className="mb-3">
         <TagFilter selected={tag} onChange={setTag} />
       </div>
 
+      {visible.length > MAX_KEYBOARD_RESULTS && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          Showing {MAX_KEYBOARD_RESULTS} of {visible.length} — refine search
+        </p>
+      )}
+
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-        {visible.map((p) => {
+        {visible.map((p, index) => {
           const qty = qtyByProduct.get(p.id) ?? 0;
           return (
             <div
               key={p.id}
-              className="relative isolate z-0 flex min-h-28 flex-col overflow-hidden rounded-xl border bg-card p-3 text-left shadow-sm ring-1 ring-foreground/5"
+              className={cn(
+                "relative isolate z-0 flex min-h-28 flex-col overflow-hidden rounded-xl border bg-card p-3 text-left shadow-sm ring-1 ring-foreground/5",
+                highlightId === p.id && "ring-2 ring-primary",
+              )}
             >
+              {showIndexBadges && index < MAX_KEYBOARD_RESULTS && (
+                <Badge
+                  className="pointer-events-none absolute left-2 top-2 z-10 size-5 justify-center p-0 tabular-nums"
+                  variant="outline"
+                >
+                  {index + 1}
+                </Badge>
+              )}
               {qty > 0 && (
                 <Badge className="pointer-events-none absolute right-2 top-2 z-10 tabular-nums" variant="default">
                   {qty}

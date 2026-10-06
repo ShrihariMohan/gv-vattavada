@@ -18,6 +18,7 @@ import {
   formatInvoiceNumber,
   KEYBOARD_SHORTCUTS,
   lastWriteWinsAllowed,
+  pickVisibleByDigit,
   matchesPhone,
   nextInvoiceNumber,
   nextSyncStatus,
@@ -397,12 +398,27 @@ describe("R57 dates", () => {
   });
 });
 
+describe("POS keyboard selection", () => {
+  it("maps digits 1-9 to visible slots only", () => {
+    const visible = ["a", "b", "c"];
+    expect(pickVisibleByDigit(visible, 1)).toBe("a");
+    expect(pickVisibleByDigit(visible, 3)).toBe("c");
+    expect(pickVisibleByDigit(visible, 4)).toBeNull();
+    expect(pickVisibleByDigit([], 1)).toBeNull();
+    const many = Array.from({ length: 12 }, (_, i) => i);
+    expect(pickVisibleByDigit(many, 9)).toBe(8);
+    expect(pickVisibleByDigit(many, 1)).toBe(0);
+  });
+});
+
 describe("R62 shortcuts R63 search R66 R67 later metrics R68 reports", () => {
   it("exposes shortcuts, reports, food cost, occupancy trio", () => {
     expect(KEYBOARD_SHORTCUTS["Ctrl+K"]).toBe("Search");
+    expect(KEYBOARD_SHORTCUTS["1-9"]).toBe("Add item");
+    expect(KEYBOARD_SHORTCUTS.Enter).toBe("Add first item");
     expect(KEYBOARD_SHORTCUTS["Ctrl+Enter"]).toBe("Pay");
     expect(KEYBOARD_SHORTCUTS.F1).toBe("New Bill");
-    expect(KEYBOARD_SHORTCUTS.Escape).toBe("Cancel");
+    expect(KEYBOARD_SHORTCUTS.Escape).toBe("Clear search / cancel");
     expect(reportFormats()).toEqual(["PDF", "Excel", "CSV", "Print"]);
     expect(csvEscape([["a", "b,c"]])).toContain('"b,c"');
     expect(foodCostPct(600, 1500)).toBe(40);

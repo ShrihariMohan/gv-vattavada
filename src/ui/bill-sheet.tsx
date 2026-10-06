@@ -22,7 +22,7 @@ export function BillSheet({
     <article
       className={cn(
         "bill-sheet mx-auto w-full bg-white text-[#111] shadow-sm ring-1 ring-black/10",
-        thermal ? "thermal thermal-58 max-w-[58mm] p-2 font-mono text-[11px]" : "max-w-[420px] p-6",
+        thermal ? "thermal thermal-80 max-w-[80mm] p-2 font-mono text-[11px]" : "max-w-[420px] p-6",
         className,
       )}
       style={{ fontFamily: thermal ? undefined : "ui-sans-serif, system-ui, sans-serif" }}
