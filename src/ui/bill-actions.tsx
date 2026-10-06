@@ -5,9 +5,18 @@ import { BillSheet } from "@/ui/bill-sheet";
 import { copyBillImage, printBill, shareBillImage } from "@/ui/share-bill";
 import type { BillView } from "@/domain/bill";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-export function BillActions({ bill, extra }: { bill: BillView; extra?: ReactNode }) {
+export function BillActions({
+  bill,
+  extra,
+  variant = "default",
+}: {
+  bill: BillView;
+  extra?: ReactNode;
+  variant?: "default" | "thermal";
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
 
@@ -32,13 +41,16 @@ export function BillActions({ bill, extra }: { bill: BillView; extra?: ReactNode
         <Button variant="outline" disabled={busy} onClick={() => run(() => shareBillImage(ref.current!, bill.docNo))}>
           Share
         </Button>
-        <Button variant="outline" disabled={busy} onClick={() => printBill()}>
+        <Button variant="outline" disabled={busy} onClick={() => printBill(ref.current)}>
           Print
         </Button>
         {extra}
       </div>
-      <div ref={ref} className="bill-print-root">
-        <BillSheet bill={bill} />
+      <div
+        ref={ref}
+        className={cn("bill-print-root", variant === "thermal" && "flex justify-center bg-muted/30 py-3")}
+      >
+        <BillSheet bill={bill} variant={variant} />
       </div>
     </div>
   );

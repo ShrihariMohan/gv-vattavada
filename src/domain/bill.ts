@@ -26,14 +26,8 @@ export type BillView = {
   footerLines: string[];
 };
 
-function footerFor(businessName: string, address: string, phone: string): string[] {
-  return [
-    "Thank you. Please visit again.",
-    businessName,
-    address,
-    phone,
-    "This is a computer-generated bill.",
-  ];
+function footerFor(): string[] {
+  return ["Thank you!"];
 }
 
 export function billFromInvoice(state: AppState, invoiceId: string): BillView {
@@ -66,7 +60,7 @@ export function billFromInvoice(state: AppState, invoiceId: string): BillView {
     total: formatINR(invoice.total_paise),
     paymentMethod: payments.map((p) => p.method).join(" + ") || "UNPAID",
     paymentStatus: invoice.payment_status,
-    footerLines: footerFor(business.name, business.address, business.phone),
+    footerLines: footerFor(),
   };
 }
 
@@ -110,7 +104,7 @@ export function billFromOrder(state: AppState, orderId: string, discountPaise = 
     total: formatINR(snap.total_paise),
     paymentMethod: "UNPAID",
     paymentStatus: order.status,
-    footerLines: footerFor(business.name, business.address, business.phone),
+    footerLines: footerFor(),
   };
 }
 

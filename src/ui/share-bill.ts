@@ -35,8 +35,67 @@ export async function shareBillImage(el: HTMLElement, title: string) {
   await copyBillImage(el);
 }
 
-export function printBill() {
-  window.print();
+const THERMAL_PRINT_STYLES = `
+  @page { margin: 2mm; size: 80mm auto; }
+  html, body { margin: 0; padding: 0; background: #fff; color: #111; }
+  .bill-print-root { display: flex; justify-content: center; width: 100%; }
+  .bill-sheet { box-shadow: none !important; ring: none !important; }
+  .bill-sheet img { max-height: 52px; width: auto; margin: 0 auto; display: block; }
+  .bill-sheet.thermal {
+    width: 80mm; max-width: 80mm; padding: 1.5mm; margin: 0 auto;
+    font-family: ui-monospace, monospace; font-size: 10px; line-height: 1.25;
+    box-shadow: none !important;
+  }
+  .bill-sheet.thermal img { max-height: 28px; }
+  .bill-sheet.thermal table { table-layout: fixed; width: 100%; border-collapse: collapse; }
+  .bill-sheet.thermal td, .bill-sheet.thermal th { padding: 1px 2px; }
+  .bill-sheet.thermal td:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bill-sheet.thermal td:last-child, .bill-sheet.thermal th:last-child { white-space: nowrap; }
+`;
+
+/** Print only the bill element (thermal 80mm). Falls back to page print CSS when no target. */
+export function printBill(source?: HTMLElement | null) {
+  const el =
+    source ??
+    document.querySelector<HTMLElement>(".bill-print-only") ??
+    document.querySelector<HTMLElement>(".bill-print-root");
+  if (!el) {
+    window.print();
+    return;
+  }
+
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  const win = iframe.contentWindow;
+  if (!doc || !win) {
+    iframe.remove();
+    window.print();
+    return;
+  }
+
+  doc.open();
+  doc.write("<!DOCTYPE html><html><head><title>Bill</title>");
+  doc.write(`<style>${THERMAL_PRINT_STYLES}</style>`);
+  for (const sheet of document.querySelectorAll('link[rel="stylesheet"]')) {
+    doc.head.appendChild(sheet.cloneNode(true));
+  }
+  doc.write("</head><body></body></html>");
+  doc.close();
+
+  doc.body.appendChild(el.cloneNode(true));
+
+  const cleanup = () => {
+    window.setTimeout(() => iframe.remove(), 500);
+  };
+  win.addEventListener("afterprint", cleanup, { once: true });
+  window.setTimeout(cleanup, 10_000);
+
+  win.focus();
+  win.print();
 }
 
 function downloadBlob(blob: Blob, name: string) {

@@ -1,4 +1,4 @@
-const CACHE = "vbm-shell-v4";
+const CACHE = "vbm-shell-v5";
 const PRECACHE = [
   "/",
   "/royal-residency",
@@ -9,6 +9,7 @@ const PRECACHE = [
   "/login",
   "/dashboard",
   "/pos",
+  "/invoices",
   "/offline.html",
   "/manifest.webmanifest",
   "/icon.svg",
@@ -114,7 +115,8 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (req.mode === "navigate") {
-    event.respondWith(networkFirst(req, "/offline.html"));
+    const fallback = url.pathname.startsWith("/invoices") ? "/invoices" : "/offline.html";
+    event.respondWith(networkFirst(req, fallback));
     return;
   }
 

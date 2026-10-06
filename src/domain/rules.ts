@@ -306,13 +306,31 @@ export const PRODUCT_CATEGORIES = [
 
 export const PAYMENT_METHODS: PaymentMethod[] = ["CASH", "UPI", "CARD", "BANK_TRANSFER", "OTHER"];
 
+export const MAX_KEYBOARD_RESULTS = 9;
+
+export type KeyboardDigit = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+export function pickVisibleByDigit<T>(visible: readonly T[], digit: KeyboardDigit): T | null {
+  const index = digit - 1;
+  if (index < 0 || index >= MAX_KEYBOARD_RESULTS || index >= visible.length) return null;
+  return visible[index] ?? null;
+}
+
 export const KEYBOARD_SHORTCUTS = {
+  "Ctrl+K": "Search",
+  "1-9": "Add item",
+  Enter: "Add first item",
+  "+/-": "Adjust last item",
+  "Ctrl+Enter": "Pay",
+  "Ctrl+N": "New Bill",
+  "Ctrl+Shift+H": "Hold",
+  "Ctrl+P": "Print",
+  Escape: "Clear search / cancel",
+  "Ctrl+/": "Help",
   F1: "New Bill",
   F2: "Search",
   F3: "Hold",
   F4: "Payment",
-  F5: "Print",
-  Escape: "Cancel",
 } as const;
 
 export function isDayClosed(
