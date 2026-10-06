@@ -122,7 +122,7 @@ export default function OrdersPage() {
         </DialogContent>
       </Dialog>
       {view && bill && (
-        <div className="hidden print:block">
+        <div className="bill-print-only hidden print:block" aria-hidden="true">
           <BillSheet bill={bill} />
         </div>
       )}

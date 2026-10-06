@@ -728,7 +728,7 @@ function PosInner() {
         </DialogContent>
       </Dialog>
       {invoiceBill && (
-        <div className="hidden print:block">
+        <div className="bill-print-only hidden print:block" aria-hidden="true">
           <BillSheet bill={invoiceBill} variant="thermal" />
         </div>
       )}

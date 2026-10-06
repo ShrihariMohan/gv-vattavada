@@ -35,8 +35,61 @@ export async function shareBillImage(el: HTMLElement, title: string) {
   await copyBillImage(el);
 }
 
-export function printBill() {
-  window.print();
+const THERMAL_PRINT_STYLES = `
+  @page { margin: 4mm; size: auto; }
+  html, body { margin: 0; padding: 0; background: #fff; color: #111; }
+  .bill-sheet { box-shadow: none !important; max-width: none !important; }
+  .bill-sheet img { max-height: 52px; width: auto; margin: 0 auto; display: block; }
+  .bill-sheet.thermal {
+    width: 58mm; max-width: 58mm; padding: 2mm; margin: 0 auto;
+    font-family: ui-monospace, monospace; font-size: 11px; box-shadow: none;
+  }
+  .bill-sheet.thermal img { max-height: 32px; }
+`;
+
+/** Print only the bill element (thermal 58mm). Falls back to page print CSS when no target. */
+export function printBill(source?: HTMLElement | null) {
+  const el =
+    source ??
+    document.querySelector<HTMLElement>(".bill-print-only") ??
+    document.querySelector<HTMLElement>(".bill-print-root");
+  if (!el) {
+    window.print();
+    return;
+  }
+
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  const win = iframe.contentWindow;
+  if (!doc || !win) {
+    iframe.remove();
+    window.print();
+    return;
+  }
+
+  doc.open();
+  doc.write("<!DOCTYPE html><html><head><title>Bill</title>");
+  doc.write(`<style>${THERMAL_PRINT_STYLES}</style>`);
+  for (const sheet of document.querySelectorAll('link[rel="stylesheet"]')) {
+    doc.head.appendChild(sheet.cloneNode(true));
+  }
+  doc.write("</head><body></body></html>");
+  doc.close();
+
+  doc.body.appendChild(el.cloneNode(true));
+
+  const cleanup = () => {
+    window.setTimeout(() => iframe.remove(), 500);
+  };
+  win.addEventListener("afterprint", cleanup, { once: true });
+  window.setTimeout(cleanup, 10_000);
+
+  win.focus();
+  win.print();
 }
 
 function downloadBlob(blob: Blob, name: string) {

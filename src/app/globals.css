@@ -58,11 +58,31 @@
 @media print {
   @page {
     margin: 4mm;
+    size: auto;
   }
   html,
   body {
     background: #fff !important;
     color: #111 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  /* Hide the full app chrome; only bill print targets stay visible. */
+  body * {
+    visibility: hidden;
+  }
+  .bill-print-only,
+  .bill-print-only *,
+  .bill-print-root,
+  .bill-print-root * {
+    visibility: visible;
+  }
+  .bill-print-only,
+  .bill-print-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
   }
   .no-print {
     display: none !important;
@@ -78,6 +98,9 @@
   .bill-print-root,
   .bill-sheet {
     box-shadow: none !important;
+    ring: none !important;
+  }
+  .bill-sheet {
     max-width: none !important;
   }
   .bill-sheet img {
@@ -93,6 +116,7 @@
     margin: 0 auto !important;
     font-size: 11px !important;
     box-shadow: none !important;
+    ring: none !important;
   }
   .bill-sheet.thermal img {
     max-height: 32px !important;

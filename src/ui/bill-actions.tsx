@@ -40,7 +40,7 @@ export function BillActions({
         <Button variant="outline" disabled={busy} onClick={() => run(() => shareBillImage(ref.current!, bill.docNo))}>
           Share
         </Button>
-        <Button variant="outline" disabled={busy} onClick={() => printBill()}>
+        <Button variant="outline" disabled={busy} onClick={() => printBill(ref.current)}>
           Print
         </Button>
         {extra}
