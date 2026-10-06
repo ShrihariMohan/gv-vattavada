@@ -5,6 +5,7 @@ import { BillSheet } from "@/ui/bill-sheet";
 import { copyBillImage, printBill, shareBillImage } from "@/ui/share-bill";
 import type { BillView } from "@/domain/bill";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export function BillActions({
@@ -45,7 +46,10 @@ export function BillActions({
         </Button>
         {extra}
       </div>
-      <div ref={ref} className="bill-print-root">
+      <div
+        ref={ref}
+        className={cn("bill-print-root", variant === "thermal" && "flex justify-center bg-muted/30 py-3")}
+      >
         <BillSheet bill={bill} variant={variant} />
       </div>
     </div>

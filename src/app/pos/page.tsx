@@ -489,26 +489,30 @@ function PosInner() {
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
         {visible.map((p, index) => {
           const qty = qtyByProduct.get(p.id) ?? 0;
+          const showIndex = showIndexBadges && index < MAX_KEYBOARD_RESULTS;
           return (
             <div
               key={p.id}
               className={cn(
-                "relative isolate z-0 flex min-h-28 flex-col overflow-hidden rounded-xl border bg-card p-3 text-left shadow-sm ring-1 ring-foreground/5",
-                highlightId === p.id && "ring-2 ring-primary",
+                "relative flex min-h-28 flex-col overflow-hidden rounded-xl border bg-card p-3 text-left shadow-sm",
+                highlightId === p.id ? "border-2 border-primary" : "border-border",
               )}
             >
-              {showIndexBadges && index < MAX_KEYBOARD_RESULTS && (
-                <Badge
-                  className="pointer-events-none absolute left-2 top-2 z-10 size-5 justify-center p-0 tabular-nums"
-                  variant="outline"
+              {showIndex && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute left-1.5 top-1.5 z-10 flex size-5 items-center justify-center rounded-sm bg-background text-[10px] font-semibold tabular-nums leading-none text-muted-foreground ring-1 ring-border"
                 >
                   {index + 1}
-                </Badge>
+                </span>
               )}
               {qty > 0 && (
-                <Badge className="pointer-events-none absolute right-2 top-2 z-10 tabular-nums" variant="default">
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute right-1.5 top-1.5 z-10 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold tabular-nums leading-none text-primary-foreground"
+                >
                   {qty}
-                </Badge>
+                </span>
               )}
               <button
                 type="button"
@@ -518,7 +522,15 @@ function PosInner() {
                   addProduct(p.id);
                 }}
               >
-                <div className="pr-8 font-medium leading-tight">{p.name}</div>
+                <div
+                  className={cn(
+                    "font-medium leading-tight",
+                    (showIndex || qty > 0) && "pt-5",
+                    qty > 0 && "pr-6",
+                  )}
+                >
+                  {p.name}
+                </div>
                 {p.description ? <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{p.description}</div> : null}
                 <div className="mt-auto pt-2 text-sm font-medium tabular-nums">{formatINR(p.price_paise)}</div>
               </button>
@@ -888,7 +900,7 @@ function PosInner() {
       )}
 
       <Dialog open={!!invoiceId} onOpenChange={(o) => !o && closeInvoice()}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Invoice{invoiceBill ? ` · ${invoiceBill.docNo}` : ""}</DialogTitle>
           </DialogHeader>
