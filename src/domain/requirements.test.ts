@@ -298,7 +298,7 @@ describe("order bill view", () => {
     expect(bill.kind).toBe("BILL");
     expect(bill.customer).toBe("Meera");
     expect(bill.items.some((i) => i.name === "Tea" && i.qty === 2)).toBe(true);
-    expect(bill.footerLines.some((l) => /computer-generated/i.test(l))).toBe(true);
+    expect(bill.footerLines).toEqual(["Thank you!"]);
   });
 });
 
@@ -399,6 +399,8 @@ describe("R57 dates", () => {
 
 describe("R62 shortcuts R63 search R66 R67 later metrics R68 reports", () => {
   it("exposes shortcuts, reports, food cost, occupancy trio", () => {
+    expect(KEYBOARD_SHORTCUTS["Ctrl+K"]).toBe("Search");
+    expect(KEYBOARD_SHORTCUTS["Ctrl+Enter"]).toBe("Pay");
     expect(KEYBOARD_SHORTCUTS.F1).toBe("New Bill");
     expect(KEYBOARD_SHORTCUTS.Escape).toBe("Cancel");
     expect(reportFormats()).toEqual(["PDF", "Excel", "CSV", "Print"]);

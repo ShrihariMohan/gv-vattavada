@@ -4,11 +4,15 @@ import { Screen } from "@/ui/Screen";
 import { Money } from "@/ui/Shell";
 import { useApp } from "@/ui/AppProvider";
 import { StatusBadge } from "@/ui/status-badge";
-import { formatINR } from "@/domain/money";
+import { formatINR, rupeesToPaise } from "@/domain/money";
 import { KEYBOARD_SHORTCUTS } from "@/domain/rules";
+import { billFromInvoice } from "@/domain/bill";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PaymentMethod } from "@/domain/types";
+import { BillActions } from "@/ui/bill-actions";
+import { BillSheet } from "@/ui/bill-sheet";
+import { printBill } from "@/ui/share-bill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +25,8 @@ import { productMatchesQuery, productMatchesSelectedTag } from "@/marketing/menu
 import { isListedOrder } from "@/domain/bill";
 import { TagFilter } from "@/ui/tag-filter";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+
+const PRIMARY_SHORTCUTS = ["Ctrl+K", "Ctrl+Enter", "Ctrl+N", "Ctrl+Shift+H", "Ctrl+P", "Escape", "Ctrl+/"] as const;
 
 export default function PosPage() {
   return (
@@ -47,6 +53,8 @@ function PosInner() {
   const [roomNumber, setRoomNumber] = useState("");
   const [tableId, setTableId] = useState("");
   const [billOpen, setBillOpen] = useState(false);
+  const [invoiceId, setInvoiceId] = useState<string | null>(params.get("invoice"));
+  const [helpOpen, setHelpOpen] = useState(false);
   const tapLock = useRef(false);
 
   const order = service.state.orders.find((o) => o.id === orderId && !o.deleted_at);
@@ -69,6 +77,31 @@ function PosInner() {
   );
   const totals = orderId ? service.orderTotals(orderId, discount) : null;
   const canEdit = order && order.status !== "PAID" && order.status !== "CANCELLED";
+  const invoiceBill = useMemo(() => {
+    if (!invoiceId) return null;
+    try {
+      return billFromInvoice(service.state, invoiceId);
+    } catch {
+      return null;
+    }
+  }, [invoiceId, service.state]);
+
+  const closeInvoice = useCallback(() => {
+    setInvoiceId(null);
+    router.replace("/pos", { scroll: false });
+  }, [router]);
+
+  const holdTicket = useCallback(() => {
+    if (!orderId || !canEdit) return;
+    service.holdBill(orderId);
+    refresh();
+    toast.message("Held locally");
+  }, [orderId, canEdit, refresh, service]);
+
+  useEffect(() => {
+    const id = params.get("invoice");
+    setInvoiceId(id);
+  }, [params]);
 
   const start = (opts?: { table_id?: string | null }) => {
     const o = service.startOrder({
@@ -143,36 +176,98 @@ function PosInner() {
   };
 
   useEffect(() => {
+    const mod = (e: KeyboardEvent) => e.metaKey || e.ctrlKey;
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const inField = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (helpOpen) {
+          setHelpOpen(false);
+          return;
+        }
+        if (invoiceId) {
+          closeInvoice();
+          return;
+        }
+        if (payOpen) {
+          setPayOpen(false);
+          return;
+        }
+        if (editOpen) {
+          setEditOpen(false);
+          return;
+        }
+        if (newOpen) {
+          setNewOpen(false);
+          return;
+        }
+        if (billOpen) {
+          setBillOpen(false);
+          return;
+        }
+        return;
+      }
+
+      if (inField && !(mod(e) && e.key === "Enter")) return;
+
       if (e.key === "F1") {
         e.preventDefault();
         setNewOpen(true);
+        return;
       }
       if (e.key === "F2") {
         e.preventDefault();
         document.getElementById("pos-search")?.focus();
+        return;
       }
-      if (e.key === "F3" && orderId && canEdit) {
+      if (e.key === "F3") {
         e.preventDefault();
-        service.holdBill(orderId);
-        refresh();
-        toast.message("Held locally");
+        holdTicket();
+        return;
       }
       if (e.key === "F4") {
         e.preventDefault();
-        if (orderId && canEdit) setPayOpen(true);
+        if (orderId && canEdit && items.length) setPayOpen(true);
+        return;
       }
-      if (e.key === "Escape") {
+
+      if (!mod(e)) return;
+
+      if (e.key === "k" || e.key === "K") {
         e.preventDefault();
-        setPayOpen(false);
-        setNewOpen(false);
+        document.getElementById("pos-search")?.focus();
+        return;
+      }
+      if (e.key === "Enter" && !payOpen) {
+        e.preventDefault();
+        if (orderId && canEdit && items.length) setPayOpen(true);
+        return;
+      }
+      if (e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        setNewOpen(true);
+        return;
+      }
+      if ((e.key === "h" || e.key === "H") && e.shiftKey) {
+        e.preventDefault();
+        holdTicket();
+        return;
+      }
+      if ((e.key === "p" || e.key === "P") && invoiceId) {
+        e.preventDefault();
+        printBill();
+        return;
+      }
+      if (e.key === "/") {
+        e.preventDefault();
+        setHelpOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [orderId, canEdit, refresh, service]);
+  }, [orderId, canEdit, items.length, payOpen, invoiceId, helpOpen, editOpen, newOpen, billOpen, holdTicket, closeInvoice]);
 
   return (
     <Screen
@@ -202,7 +297,7 @@ function PosInner() {
       }
     >
       <p className="no-print mb-3 text-xs text-muted-foreground">
-        {Object.entries(KEYBOARD_SHORTCUTS).map(([k, v]) => `${k} ${v}`).join(" · ")}
+        {PRIMARY_SHORTCUTS.map((k) => `${k} ${KEYBOARD_SHORTCUTS[k]}`).join(" · ")}
       </p>
 
       <div className="grid gap-4 pb-24 lg:grid-cols-[minmax(0,1fr)_360px] lg:pb-0">
@@ -367,16 +462,7 @@ function PosInner() {
               >
                 Edit
               </Button>
-              <Button
-                variant="outline"
-                disabled={!canEdit}
-                onClick={() => {
-                  if (!orderId) return;
-                  service.holdBill(orderId);
-                  refresh();
-                  toast.message("Held locally");
-                }}
-              >
+              <Button variant="outline" disabled={!canEdit} onClick={holdTicket}>
                 Hold
               </Button>
               <Button disabled={!canEdit || !items.length} onClick={() => setPayOpen(true)}>
@@ -469,16 +555,7 @@ function PosInner() {
               >
                 Edit
               </Button>
-              <Button
-                variant="outline"
-                disabled={!canEdit}
-                onClick={() => {
-                  if (!orderId) return;
-                  service.holdBill(orderId);
-                  refresh();
-                  toast.message("Held locally");
-                }}
-              >
+              <Button variant="outline" disabled={!canEdit} onClick={holdTicket}>
                 Hold
               </Button>
               <Button
@@ -621,13 +698,56 @@ function PosInner() {
               setPayOpen(false);
               setOrderId(null);
               refresh();
-              router.push(`/invoices/${bill.id}`);
+              setInvoiceId(bill.id);
+              router.replace(`/pos?invoice=${bill.id}`, { scroll: false });
             } catch (e) {
               toast.error(e instanceof Error ? e.message : "Failed");
             }
           }}
         />
       )}
+
+      <Dialog open={!!invoiceId} onOpenChange={(o) => !o && closeInvoice()}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Invoice{invoiceBill ? ` · ${invoiceBill.docNo}` : ""}</DialogTitle>
+          </DialogHeader>
+          {invoiceBill ? (
+            <BillActions
+              bill={invoiceBill}
+              variant="thermal"
+              extra={
+                <Button variant="outline" onClick={() => router.push(`/invoices/${invoiceId}`)}>
+                  View in list
+                </Button>
+              }
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">Invoice not found on this device.</p>
+          )}
+        </DialogContent>
+      </Dialog>
+      {invoiceBill && (
+        <div className="hidden print:block">
+          <BillSheet bill={invoiceBill} variant="thermal" />
+        </div>
+      )}
+
+      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Keyboard shortcuts</DialogTitle>
+          </DialogHeader>
+          <ul className="space-y-1 text-sm">
+            {Object.entries(KEYBOARD_SHORTCUTS).map(([k, v]) => (
+              <li key={k} className="flex justify-between gap-4">
+                <span className="font-mono text-muted-foreground">{k}</span>
+                <span>{v}</span>
+              </li>
+            ))}
+          </ul>
+        </DialogContent>
+      </Dialog>
     </Screen>
   );
 }
@@ -691,17 +811,35 @@ function PayDialog({
   onClose: () => void;
   onPay: (parts: { method: PaymentMethod; amount_paise: number }[]) => void;
 }) {
-  const [cash, setCash] = useState(total);
+  const [cash, setCash] = useState(total / 100);
   const [upi, setUpi] = useState(0);
   const [card, setCard] = useState(0);
   const parts = useMemo(() => {
     const p: { method: PaymentMethod; amount_paise: number }[] = [];
-    if (cash) p.push({ method: "CASH", amount_paise: cash });
-    if (upi) p.push({ method: "UPI", amount_paise: upi });
-    if (card) p.push({ method: "CARD", amount_paise: card });
+    const cashPaise = rupeesToPaise(cash);
+    const upiPaise = rupeesToPaise(upi);
+    const cardPaise = rupeesToPaise(card);
+    if (cashPaise) p.push({ method: "CASH", amount_paise: cashPaise });
+    if (upiPaise) p.push({ method: "UPI", amount_paise: upiPaise });
+    if (cardPaise) p.push({ method: "CARD", amount_paise: cardPaise });
     return p;
   }, [cash, upi, card]);
-  const sum = cash + upi + card;
+  const sum = rupeesToPaise(cash) + rupeesToPaise(upi) + rupeesToPaise(card);
+  const submit = () => {
+    if (sum !== total || !parts.length) return;
+    onPay(parts);
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== "Enter") return;
+      e.preventDefault();
+      submit();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
@@ -710,16 +848,16 @@ function PayDialog({
         </DialogHeader>
         <div className="grid gap-3">
           <div className="grid gap-1.5">
-            <Label>Cash (paise)</Label>
-            <Input type="number" value={cash} onChange={(e) => setCash(Number(e.target.value))} />
+            <Label>Cash (₹)</Label>
+            <Input type="number" min={0} step="0.01" value={cash} onChange={(e) => setCash(Number(e.target.value))} />
           </div>
           <div className="grid gap-1.5">
-            <Label>UPI (paise)</Label>
-            <Input type="number" value={upi} onChange={(e) => setUpi(Number(e.target.value))} />
+            <Label>UPI (₹)</Label>
+            <Input type="number" min={0} step="0.01" value={upi} onChange={(e) => setUpi(Number(e.target.value))} />
           </div>
           <div className="grid gap-1.5">
-            <Label>Card (paise)</Label>
-            <Input type="number" value={card} onChange={(e) => setCard(Number(e.target.value))} />
+            <Label>Card (₹)</Label>
+            <Input type="number" min={0} step="0.01" value={card} onChange={(e) => setCard(Number(e.target.value))} />
           </div>
           <Badge variant={sum === total ? "secondary" : "destructive"}>{sum === total ? "Split matches total" : `Difference ${formatINR(sum - total)}`}</Badge>
         </div>
@@ -727,7 +865,7 @@ function PayDialog({
           <Button variant="outline" onClick={onClose}>
             Back
           </Button>
-          <Button disabled={sum !== total || !parts.length} onClick={() => onPay(parts)}>
+          <Button disabled={sum !== total || !parts.length} onClick={submit}>
             Generate bill
           </Button>
         </DialogFooter>

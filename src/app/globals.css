@@ -57,7 +57,7 @@
 
 @media print {
   @page {
-    margin: 12mm;
+    margin: 4mm;
   }
   html,
   body {
@@ -85,6 +85,22 @@
     width: auto !important;
     margin-left: auto;
     margin-right: auto;
+  }
+  .bill-sheet.thermal {
+    width: 58mm !important;
+    max-width: 58mm !important;
+    padding: 2mm !important;
+    margin: 0 auto !important;
+    font-size: 11px !important;
+    box-shadow: none !important;
+  }
+  .bill-sheet.thermal img {
+    max-height: 32px !important;
+  }
+  .bill-sheet.thermal .bill-footer {
+    margin-top: 4px !important;
+    padding-top: 2px !important;
+    font-size: 10px !important;
   }
 }
 

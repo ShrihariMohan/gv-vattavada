@@ -307,12 +307,17 @@ export const PRODUCT_CATEGORIES = [
 export const PAYMENT_METHODS: PaymentMethod[] = ["CASH", "UPI", "CARD", "BANK_TRANSFER", "OTHER"];
 
 export const KEYBOARD_SHORTCUTS = {
+  "Ctrl+K": "Search",
+  "Ctrl+Enter": "Pay",
+  "Ctrl+N": "New Bill",
+  "Ctrl+Shift+H": "Hold",
+  "Ctrl+P": "Print",
+  Escape: "Cancel",
+  "Ctrl+/": "Help",
   F1: "New Bill",
   F2: "Search",
   F3: "Hold",
   F4: "Payment",
-  F5: "Print",
-  Escape: "Cancel",
 } as const;
 
 export function isDayClosed(

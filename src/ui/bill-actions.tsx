@@ -7,7 +7,15 @@ import type { BillView } from "@/domain/bill";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-export function BillActions({ bill, extra }: { bill: BillView; extra?: ReactNode }) {
+export function BillActions({
+  bill,
+  extra,
+  variant = "default",
+}: {
+  bill: BillView;
+  extra?: ReactNode;
+  variant?: "default" | "thermal";
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
 
@@ -38,7 +46,7 @@ export function BillActions({ bill, extra }: { bill: BillView; extra?: ReactNode
         {extra}
       </div>
       <div ref={ref} className="bill-print-root">
-        <BillSheet bill={bill} />
+        <BillSheet bill={bill} variant={variant} />
       </div>
     </div>
   );
