@@ -43,14 +43,23 @@ const THERMAL_PRINT_STYLES = `
   .bill-sheet img { max-height: 52px; width: auto; margin: 0 auto; display: block; }
   .bill-sheet.thermal {
     width: 80mm; max-width: 80mm; padding: 1.5mm 1.5mm 8mm 1.5mm; margin: 0 auto;
-    font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.3;
+    font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.2;
     box-shadow: none !important;
   }
   .bill-sheet.thermal img { max-height: 32px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .bill-sheet.thermal table { table-layout: fixed; width: 100%; border-collapse: collapse; }
-  .bill-sheet.thermal td, .bill-sheet.thermal th { padding: 1px 2px; }
-  .bill-sheet.thermal td:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bill-sheet.thermal td:last-child, .bill-sheet.thermal th:last-child { white-space: nowrap; }
+  .bill-sheet.thermal col:nth-child(2) { width: 1.35rem; }
+  .bill-sheet.thermal col:nth-child(3) { width: 5.5rem; }
+  .bill-sheet.thermal td, .bill-sheet.thermal th { padding: 0 1px; vertical-align: top; }
+  .bill-sheet.thermal td:first-child, .bill-sheet.thermal th:first-child {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 2px;
+  }
+  .bill-sheet.thermal td:nth-child(2), .bill-sheet.thermal th:nth-child(2) {
+    width: 1.35rem; padding-left: 1px; padding-right: 1px; white-space: nowrap;
+  }
+  .bill-sheet.thermal td:last-child, .bill-sheet.thermal th:last-child {
+    width: 5.5rem; white-space: nowrap; padding-left: 2px; text-align: right;
+  }
   .bill-sheet.thermal .bill-footer { margin-top: 4px; padding-bottom: 4mm; }
 `;
 
