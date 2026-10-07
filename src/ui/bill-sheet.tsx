@@ -23,31 +23,31 @@ export function BillSheet({
       className={cn(
         "bill-sheet mx-auto bg-white text-[#111] shadow-sm ring-1 ring-black/10",
         thermal
-          ? "thermal thermal-80 w-[80mm] max-w-[80mm] shrink-0 p-1.5 font-mono text-[10px] leading-tight"
+          ? "thermal thermal-80 w-[80mm] max-w-[80mm] shrink-0 p-1.5 pb-3 font-mono text-[11px] leading-snug"
           : "w-full max-w-[420px] p-6",
         className,
       )}
       style={{ fontFamily: thermal ? "ui-monospace, monospace" : "ui-sans-serif, system-ui, sans-serif" }}
     >
       <header className={cn("border-b border-black/20 text-center", thermal ? "pb-0.5" : "pb-3")}>
-        <BrandLogo height={thermal ? 28 : 52} className={cn("mx-auto", thermal ? "mb-0.5 max-h-[28px]" : "mb-2 max-h-[52px]")} />
-        <p className={cn("font-semibold tracking-tight", thermal ? "text-xs" : "text-lg")}>{bill.businessName}</p>
-        <p className={cn("text-[#444]", thermal ? "text-[9px]" : "text-xs")}>{bill.phone}</p>
+        <BrandLogo height={thermal ? 32 : 52} className={cn("mx-auto", thermal ? "mb-0.5 max-h-[32px]" : "mb-2 max-h-[52px]")} />
+        <p className={cn("font-semibold tracking-tight", thermal ? "text-[12px]" : "text-lg")}>{bill.businessName}</p>
+        <p className={cn("text-[#444]", thermal ? "text-[10px]" : "text-xs")}>{bill.phone}</p>
       </header>
-      <div className={cn("flex justify-between gap-2", thermal ? "mt-0.5 text-[9px]" : "mt-3 text-xs")}>
+      <div className={cn("flex justify-between gap-2", thermal ? "mt-0.5 text-[10px]" : "mt-3 text-xs")}>
         <span className="truncate">
           {bill.kind === "INVOICE" ? "Invoice" : "Bill"} {bill.docNo}
         </span>
         <span className="shrink-0 tabular-nums">{bill.date}</span>
       </div>
-      <p className={cn("truncate", thermal ? "mt-0.5 text-[10px]" : "mt-1 text-sm")}>
+      <p className={cn("truncate", thermal ? "mt-0.5 text-[11px]" : "mt-1 text-sm")}>
         {bill.customer}
         {meta ? <span className="text-[#555]"> · {meta}</span> : null}
       </p>
       <table
         className={cn(
           "mt-1 w-full border-collapse",
-          thermal ? "table-fixed text-[10px]" : "mt-4 text-sm",
+          thermal ? "table-fixed text-[11px]" : "mt-4 text-sm",
         )}
       >
         {thermal && (
@@ -61,7 +61,7 @@ export function BillSheet({
           <tr
             className={cn(
               "border-y border-black/20 text-left uppercase tracking-wide text-[#555]",
-              thermal ? "text-[9px]" : "text-xs",
+              thermal ? "text-[10px]" : "text-xs",
             )}
           >
             <th className={cn("font-medium", thermal ? "py-px pr-1" : "py-1.5")}>Item</th>
@@ -81,19 +81,19 @@ export function BillSheet({
           ))}
         </tbody>
       </table>
-      <div className={cn("space-y-px", thermal ? "mt-0.5 text-[10px]" : "mt-3 space-y-0.5 text-sm")}>
+      <div className={cn("space-y-px", thermal ? "mt-0.5 text-[11px]" : "mt-3 space-y-0.5 text-sm")}>
         <Row label="Subtotal" value={bill.subtotal} />
         {!hideDiscount && <Row label="Discount" value={bill.discount} />}
         {bill.tax !== "₹0.00" && <Row label="Tax" value={bill.tax} />}
         <Row label="Total" value={bill.total} strong />
-        <p className={cn("pt-0.5 text-[#444]", thermal ? "text-[10px]" : "text-xs")}>
+        <p className={cn("pt-0.5 text-[#444]", thermal ? "text-[11px]" : "text-xs")}>
           {bill.paymentMethod} · {bill.paymentStatus}
         </p>
       </div>
       <footer
         className={cn(
           "bill-footer border-t border-dashed border-black/30 text-center text-[#444]",
-          thermal ? "mt-2 pt-1 text-[10px] leading-snug" : "mt-6 pt-3 text-[11px] leading-relaxed",
+          thermal ? "mt-2 pt-1 pb-2 text-[11px] leading-snug" : "mt-6 pt-3 text-[11px] leading-relaxed",
         )}
       >
         {bill.footerLines.map((line) => (
