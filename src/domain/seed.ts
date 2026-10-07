@@ -1,4 +1,5 @@
-import { GLOBAL_EXPENSE_CATEGORIES } from "./rules";
+import { GLOBAL_EXPENSE_CATEGORIES, hashPasswordSync } from "./rules";
+import { SEED_PASSWORDS, SEED_PASSWORD_SALT } from "./seed-logins";
 import { emptyState } from "./service";
 import { KITCHEN_MENU, MENU_CATEGORY_NAMES, categoryNameFromTags } from "@/marketing/menu";
 import type { AppState, Business, Product, Room, User } from "./types";
@@ -65,24 +66,29 @@ export function createSeedState(deviceId = "DEVICE-RESTAURANT-TABLET-01"): AppSt
   };
   state.businesses = [stayA, stayB, restaurant];
 
-  const mkUser = (id: string, username: string, passwordHash: string, name: string, role: User["role"]): User => ({
+  const mkUser = (
+    id: string,
+    username: keyof typeof SEED_PASSWORDS,
+    name: string,
+    role: User["role"],
+  ): User => ({
     id,
     username,
-    password_salt: "gv-console-2026-08",
-    password_hash: passwordHash,
+    password_salt: SEED_PASSWORD_SALT,
+    password_hash: hashPasswordSync(SEED_PASSWORDS[username], SEED_PASSWORD_SALT),
     name,
     role,
     active: true,
     created_at: t,
   });
   state.users = [
-    mkUser("user-admin", "admin", "c8e108ba", "Admin", "ADMIN"),
-    mkUser("user-manager", "manager", "052493b2", "Manager", "MANAGER"),
-    mkUser("user-staff", "staff", "7bd32363", "Kitchen staff", "STAFF"),
-    mkUser("user-rm", "kitchen.manager", "c384b7aa", "Kitchen manager", "RESTAURANT_MANAGER"),
-    mkUser("user-rs", "kitchen.staff", "f0221d80", "Kitchen floor", "RESTAURANT_STAFF"),
-    mkUser("user-sm", "stay.manager", "ffb8fcd8", "Stay manager", "STAY_MANAGER"),
-    mkUser("user-ss", "stay.staff", "ee16badc", "Stay desk", "STAY_STAFF"),
+    mkUser("user-admin", "admin", "Admin", "ADMIN"),
+    mkUser("user-manager", "manager", "Manager", "MANAGER"),
+    mkUser("user-staff", "staff", "Kitchen staff", "STAFF"),
+    mkUser("user-rm", "kitchen.manager", "Kitchen manager", "RESTAURANT_MANAGER"),
+    mkUser("user-rs", "kitchen.staff", "Kitchen floor", "RESTAURANT_STAFF"),
+    mkUser("user-sm", "stay.manager", "Stay manager", "STAY_MANAGER"),
+    mkUser("user-ss", "stay.staff", "Stay desk", "STAY_STAFF"),
   ];
   state.devices = [
     { id: "DEVICE-RESTAURANT-TABLET-01", name: "Restaurant Tablet", created_at: t },

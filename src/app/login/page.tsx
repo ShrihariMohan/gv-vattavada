@@ -4,6 +4,7 @@ import { useApp } from "@/ui/AppProvider";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ export default function LoginPage() {
   const { ready, user, login } = useApp();
   const router = useRouter();
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (ready && user) router.replace("/dashboard");
@@ -58,7 +60,26 @@ export default function LoginPage() {
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" autoComplete="current-password" />
+              <div className="relative">
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  className="pr-9"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  {showPassword ? <EyeOff /> : <Eye />}
+                </Button>
+              </div>
             </div>
             {error && (
               <Alert variant="destructive">
