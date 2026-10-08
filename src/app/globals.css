@@ -103,8 +103,8 @@
     ring: none !important;
   }
   .bill-sheet.thermal {
-    width: 75mm !important;
-    max-width: 75mm !important;
+    width: 70mm !important;
+    max-width: 70mm !important;
     padding: 1.5mm 1.5mm 8mm 1.5mm !important;
     margin: 0 auto !important;
     font-family: ui-monospace, monospace !important;
@@ -169,15 +169,15 @@
 }
 
 .thermal {
-  width: 75mm;
-  max-width: 75mm;
+  width: 70mm;
+  max-width: 70mm;
   font-family: ui-monospace, monospace;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.2;
 }
 .thermal-80 {
-  width: 75mm;
-  max-width: 75mm;
+  width: 70mm;
+  max-width: 70mm;
 }
 
 .bill-print-root:has(.thermal) {
