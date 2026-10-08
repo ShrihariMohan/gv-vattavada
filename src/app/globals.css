@@ -103,12 +103,12 @@
     ring: none !important;
   }
   .bill-sheet.thermal {
-    width: 80mm !important;
-    max-width: 80mm !important;
+    width: 75mm !important;
+    max-width: 75mm !important;
     padding: 1.5mm 1.5mm 8mm 1.5mm !important;
     margin: 0 auto !important;
     font-family: ui-monospace, monospace !important;
-    font-size: 12px !important;
+    font-size: 14px !important;
     line-height: 1.2 !important;
     box-shadow: none !important;
     ring: none !important;
@@ -120,7 +120,7 @@
     margin-right: auto;
   }
   .bill-sheet.thermal img {
-    max-height: 32px !important;
+    max-height: 34px !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
@@ -163,21 +163,21 @@
   .bill-sheet.thermal .bill-footer {
     margin-top: 4px !important;
     padding-top: 2px !important;
-    padding-bottom: 4mm !important;
-    font-size: 11px !important;
+    padding-bottom: 16px !important;
+    font-size: 14px !important;
   }
 }
 
 .thermal {
-  width: 80mm;
-  max-width: 80mm;
+  width: 75mm;
+  max-width: 75mm;
   font-family: ui-monospace, monospace;
   font-size: 12px;
   line-height: 1.2;
 }
 .thermal-80 {
-  width: 80mm;
-  max-width: 80mm;
+  width: 75mm;
+  max-width: 75mm;
 }
 
 .bill-print-root:has(.thermal) {

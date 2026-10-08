@@ -56,7 +56,7 @@ export function createSeedState(deviceId = "DEVICE-RESTAURANT-TABLET-01"): AppSt
     type: "RESTAURANT",
     code: "BUS003",
     address: "Urkadu, Vattavada, Munnar, Idukki, Kerala 685505",
-    phone: "+91 86089 33892, +91 87545 04478, +91 88382 67578",
+    phone: "+91 93444 01050",
     email: "hello@cloudykitchen.local",
     currency: "INR",
     timezone: "Asia/Kolkata",

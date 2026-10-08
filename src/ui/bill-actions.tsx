@@ -35,15 +35,16 @@ export function BillActions({
   return (
     <div>
       <div className="no-print mb-3 flex flex-wrap gap-2">
+         <Button variant="outline" disabled={busy} onClick={() => printBill(ref.current)}>
+          Print
+        </Button>
         <Button variant="outline" disabled={busy} onClick={() => run(() => copyBillImage(ref.current!))}>
           Copy image
         </Button>
         <Button variant="outline" disabled={busy} onClick={() => run(() => shareBillImage(ref.current!, bill.docNo))}>
           Share
         </Button>
-        <Button variant="outline" disabled={busy} onClick={() => printBill(ref.current)}>
-          Print
-        </Button>
+       
         {extra}
       </div>
       <div

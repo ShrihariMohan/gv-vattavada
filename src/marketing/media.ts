@@ -21,7 +21,7 @@ export const SITE_CONTACTS = {
   kitchen: {
     name: "G.V Cloudy Kitchen",
     address: `Urkadu, Vattavada, Munnar, Idukki, Kerala ${PIN}`,
-    phones: ["+91 86089 33892", "+91 87545 04478", "+91 88382 67578"],
+    phones: ["+91 93444 01050"],
   },
 } as const;
 
