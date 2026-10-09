@@ -53,6 +53,9 @@ export function normalizeState(state: AppState): AppState {
     p.description ??= "";
     p.image_url ??= "";
     p.tags ??= [];
+    if (p.tags.includes("pos-adhoc") && !p.deleted_at) {
+      p.deleted_at = new Date().toISOString();
+    }
   }
   const seeded = createCatalogState(state.currentDeviceId);
   for (const cat of seeded.productCategories) {

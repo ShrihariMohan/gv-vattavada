@@ -3,7 +3,7 @@
 import { Screen } from "@/ui/Screen";
 import { Money } from "@/ui/Shell";
 import { useApp } from "@/ui/AppProvider";
-import { can } from "@/domain/rules";
+import { can, isCatalogProduct } from "@/domain/rules";
 import { rupeesToPaise } from "@/domain/money";
 import { useState } from "react";
 import type { Product } from "@/domain/types";
@@ -13,6 +13,16 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { categoryIdForTags, parseProductTags, productMatchesQuery, productMatchesSelectedTag } from "@/marketing/menu";
 import { TagFilter } from "@/ui/tag-filter";
@@ -27,8 +37,13 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const rows = service.state.products.filter(
-    (p) => p.business_id === restaurant.id && productMatchesSelectedTag(p, tag) && productMatchesQuery(p, query),
+    (p) =>
+      p.business_id === restaurant.id &&
+      isCatalogProduct(p) &&
+      productMatchesSelectedTag(p, tag) &&
+      productMatchesQuery(p, query),
   );
 
   return (
@@ -102,16 +117,21 @@ export default function ProductsPage() {
                 </TableCell>
                 {canEdit && (
                   <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setEditing(p);
-                        setOpen(true);
-                      }}
-                    >
-                      Edit
-                    </Button>
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditing(p);
+                          setOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => setDeleteId(p.id)}>
+                        Delete
+                      </Button>
+                    </div>
                   </TableCell>
                 )}
               </TableRow>
@@ -119,6 +139,36 @@ export default function ProductsPage() {
           </TableBody>
         </Table>
       </Card>
+      <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this product?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It will be removed from POS and the public menu. Past bills and invoices keep their line items. You cannot delete a product that is still on an open ticket.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (!deleteId) return;
+                try {
+                  service.deleteProduct(deleteId);
+                  toast.success("Product deleted", { description: "Queued for sync" });
+                  refresh();
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Could not delete");
+                }
+                setDeleteId(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <ProductDialog
         key={`${open}-${editing?.id ?? "new"}`}
         open={open}

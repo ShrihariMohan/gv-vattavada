@@ -21,14 +21,15 @@ import { printBill } from "@/ui/share-bill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Minus, Plus, Receipt, Search } from "lucide-react";
 import { productMatchesQuery, productMatchesSelectedTag } from "@/marketing/menu";
 import { isListedOrder } from "@/domain/bill";
+import { can, isCatalogProduct } from "@/domain/rules";
 import { TagFilter } from "@/ui/tag-filter";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +46,7 @@ export default function PosPage() {
 }
 
 function PosInner() {
-  const { service, refresh } = useApp();
+  const { service, refresh, user } = useApp();
   const router = useRouter();
   const params = useSearchParams();
   const restaurant = service.state.businesses.find((b) => b.type === "RESTAURANT")!;
@@ -63,6 +64,8 @@ function PosInner() {
   const [billOpen, setBillOpen] = useState(false);
   const [invoiceId, setInvoiceId] = useState<string | null>(params.get("invoice"));
   const [helpOpen, setHelpOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
+  const canSaveProduct = user ? can(user.role, "products.edit") : false;
   const [lastAddedProductId, setLastAddedProductId] = useState<string | null>(null);
   const [lastDigitUseAt, setLastDigitUseAt] = useState(0);
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -75,7 +78,9 @@ function PosInner() {
     for (const i of items) map.set(i.product_id, (map.get(i.product_id) ?? 0) + i.qty);
     return map;
   }, [items]);
-  const products = service.state.products.filter((p) => p.business_id === restaurant.id && p.active && !p.deleted_at);
+  const products = service.state.products.filter(
+    (p) => p.business_id === restaurant.id && p.active && isCatalogProduct(p),
+  );
   const q = query.trim().toLowerCase();
   const visible = products.filter((p) => productMatchesSelectedTag(p, tag) && productMatchesQuery(p, q));
   const tables = service.state.tables.filter((t) => t.business_id === restaurant.id && !t.deleted_at);
@@ -90,7 +95,7 @@ function PosInner() {
   const canEdit = order && order.status !== "PAID" && order.status !== "CANCELLED";
   const showIndexBadges =
     q.length > 0 || tag !== null || (lastDigitUseAt > 0 && Date.now() - lastDigitUseAt < DIGIT_HINT_MS);
-  const blockingModal = payOpen || newOpen || editOpen || helpOpen || !!invoiceId || billOpen;
+  const blockingModal = payOpen || newOpen || editOpen || helpOpen || !!invoiceId || billOpen || customOpen;
   const invoiceBill = useMemo(() => {
     if (!invoiceId) return null;
     try {
@@ -476,8 +481,20 @@ function PosInner() {
         1–9 add · Enter first · +/− last item
       </p>
 
-      <div className="mb-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <TagFilter selected={tag} onChange={setTag} />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={order?.status === "PAID" || order?.status === "CANCELLED"}
+          onClick={() => {
+            if (!orderId) start();
+            setCustomOpen(true);
+          }}
+        >
+          Custom item
+        </Button>
       </div>
 
       {visible.length > MAX_KEYBOARD_RESULTS && (
@@ -872,6 +889,30 @@ function PosInner() {
         </DialogContent>
       </Dialog>
 
+      <CustomItemDialog
+        open={customOpen}
+        onOpenChange={setCustomOpen}
+        canSaveProduct={canSaveProduct}
+        onAdd={({ name, priceRupees, qty, saveToCatalog }) => {
+          try {
+            let id = orderId;
+            if (!id) id = start();
+            service.addCustomOrderItem(id, {
+              name,
+              unit_price_paise: rupeesToPaise(priceRupees),
+              qty,
+              save_to_catalog: saveToCatalog,
+              business_id: restaurant.id,
+            });
+            refresh();
+            setCustomOpen(false);
+            toast.success(saveToCatalog ? "Custom item added and saved to menu" : "Custom item added");
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Could not add item");
+          }
+        }}
+      />
+
       {payOpen && orderId && (
         <PayDialog
           total={service.orderTotals(orderId, discount).total_paise}
@@ -994,6 +1035,105 @@ function GuestFields({
   );
 }
 
+function CustomItemDialog({
+  open,
+  onOpenChange,
+  canSaveProduct,
+  onAdd,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  canSaveProduct: boolean;
+  onAdd: (data: { name: string; priceRupees: number; qty: number; saveToCatalog: boolean }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [priceRupees, setPriceRupees] = useState("");
+  const [qty, setQty] = useState(1);
+  const [saveToCatalog, setSaveToCatalog] = useState(false);
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        onOpenChange(o);
+        if (!o) {
+          setName("");
+          setPriceRupees("");
+          setQty(1);
+          setSaveToCatalog(false);
+        }
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Custom line item</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Add a one-off combo or special price. Optionally save it to the menu for next time.
+        </p>
+        <div className="grid gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="custom-name">Name</Label>
+            <Input
+              id="custom-name"
+              placeholder="Weekend combo"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="custom-price">Price (₹)</Label>
+              <Input
+                id="custom-price"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="299"
+                value={priceRupees}
+                onChange={(e) => setPriceRupees(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="custom-qty">Qty</Label>
+              <Input
+                id="custom-qty"
+                type="number"
+                min={1}
+                value={qty}
+                onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+              />
+            </div>
+          </div>
+          {canSaveProduct && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox checked={saveToCatalog} onCheckedChange={(v) => setSaveToCatalog(v === true)} />
+              Save to products menu
+            </label>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              const price = Number(priceRupees);
+              if (!name.trim() || !Number.isFinite(price) || price < 0) {
+                toast.error("Enter a name and valid price");
+                return;
+              }
+              onAdd({ name: name.trim(), priceRupees: price, qty, saveToCatalog: canSaveProduct && saveToCatalog });
+            }}
+          >
+            Add to bill
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PayDialog({
   total,
   onClose,
@@ -1003,23 +1143,10 @@ function PayDialog({
   onClose: () => void;
   onPay: (parts: { method: PaymentMethod; amount_paise: number }[]) => void;
 }) {
-  const [cash, setCash] = useState(total / 100);
-  const [upi, setUpi] = useState(0);
-  const [card, setCard] = useState(0);
-  const parts = useMemo(() => {
-    const p: { method: PaymentMethod; amount_paise: number }[] = [];
-    const cashPaise = rupeesToPaise(cash);
-    const upiPaise = rupeesToPaise(upi);
-    const cardPaise = rupeesToPaise(card);
-    if (cashPaise) p.push({ method: "CASH", amount_paise: cashPaise });
-    if (upiPaise) p.push({ method: "UPI", amount_paise: upiPaise });
-    if (cardPaise) p.push({ method: "CARD", amount_paise: cardPaise });
-    return p;
-  }, [cash, upi, card]);
-  const sum = rupeesToPaise(cash) + rupeesToPaise(upi) + rupeesToPaise(card);
+  const [method, setMethod] = useState<"CASH" | "UPI">("CASH");
+
   const submit = () => {
-    if (sum !== total || !parts.length) return;
-    onPay(parts);
+    onPay([{ method, amount_paise: total }]);
   };
 
   useEffect(() => {
@@ -1036,30 +1163,36 @@ function PayDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Payment · {formatINR(total)}</DialogTitle>
+          <DialogTitle>Take payment</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-3">
-          <div className="grid gap-1.5">
-            <Label>Cash (₹)</Label>
-            <Input type="number" min={0} step="0.01" value={cash} onChange={(e) => setCash(Number(e.target.value))} />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>UPI (₹)</Label>
-            <Input type="number" min={0} step="0.01" value={upi} onChange={(e) => setUpi(Number(e.target.value))} />
-          </div>
-          <div className="grid gap-1.5">
-            <Label>Card (₹)</Label>
-            <Input type="number" min={0} step="0.01" value={card} onChange={(e) => setCard(Number(e.target.value))} />
-          </div>
-          <Badge variant={sum === total ? "secondary" : "destructive"}>{sum === total ? "Split matches total" : `Difference ${formatINR(sum - total)}`}</Badge>
+        <div className="rounded-xl border bg-muted/40 px-4 py-6 text-center">
+          <p className="text-sm text-muted-foreground">Amount due</p>
+          <p className="mt-1 text-3xl font-semibold tabular-nums">{formatINR(total)}</p>
         </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            type="button"
+            variant={method === "CASH" ? "default" : "outline"}
+            className="h-12"
+            onClick={() => setMethod("CASH")}
+          >
+            Cash
+          </Button>
+          <Button
+            type="button"
+            variant={method === "UPI" ? "default" : "outline"}
+            className="h-12"
+            onClick={() => setMethod("UPI")}
+          >
+            UPI
+          </Button>
+        </div>
+        <p className="text-center text-xs text-muted-foreground">Card payments are not supported.</p>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Back
           </Button>
-          <Button disabled={sum !== total || !parts.length} onClick={submit}>
-            Generate bill
-          </Button>
+          <Button onClick={submit}>Generate bill · {method === "CASH" ? "Cash" : "UPI"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

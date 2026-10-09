@@ -1,3 +1,5 @@
+import { isCatalogProduct } from "@/domain/rules";
+
 /** Public menu + POS seed. Prices in rupees; converted to paise in seed. Filter vocabulary is tags only. */
 export type KitchenMenuItem = {
   id: string;
@@ -100,11 +102,11 @@ export function categoryIdForTags(tags: string[], categories: { id: string; name
   return categories.find((c) => c.name === name)?.id ?? categories[0]?.id ?? "";
 }
 
-export function publicMenuItems<T extends { business_id: string; active: boolean; deleted_at: string | null }>(
+export function publicMenuItems<T extends { id: string; business_id: string; active: boolean; deleted_at: string | null; tags?: string[] }>(
   products: T[],
   restaurantId: string,
 ): T[] {
-  return products.filter((p) => p.business_id === restaurantId && p.active && !p.deleted_at);
+  return products.filter((p) => p.business_id === restaurantId && p.active && isCatalogProduct(p));
 }
 
 export function productMatchesSelectedTag(product: { tags?: string[] }, selected: string | null): boolean {

@@ -22,6 +22,7 @@ import {
   nextInvoiceNumber,
   nextSyncStatus,
   occupancyRate,
+  POS_EPHEMERAL_PRODUCT_ID_PREFIX,
   adr,
   revpar,
   profit,
@@ -471,6 +472,27 @@ export class AppService {
     return product;
   }
 
+  deleteProduct(productId: string) {
+    this.require("products.edit");
+    const product = this.state.products.find((p) => p.id === productId && !p.deleted_at);
+    if (!product) throw new Error("Product not found");
+    const openOrderIds = new Set(
+      this.state.orders
+        .filter((o) => !o.deleted_at && o.status !== "PAID" && o.status !== "CANCELLED")
+        .map((o) => o.id),
+    );
+    const onOpenTicket = this.state.orderItems.some(
+      (i) => i.product_id === productId && !i.deleted_at && openOrderIds.has(i.order_id),
+    );
+    if (onOpenTicket) throw new Error("Remove this item from open POS tickets before deleting.");
+    product.active = false;
+    product.deleted_at = this.now();
+    this.stamp(product);
+    this.enqueue("product", product.id, "DELETE", product);
+    this.audit("product.delete", "product", product.id, null, product);
+    return product;
+  }
+
   setTaxEnabled(enabled: boolean) {
     this.require("products.edit");
     this.state.tax_enabled = enabled;
@@ -539,6 +561,70 @@ export class AppService {
       tax_bps: product.tax_bps,
     };
     this.state.orderItems.push(item);
+    if (order.status === "OPEN") this.transitionOrder(orderId, "IN_PROGRESS");
+    return item;
+  }
+
+  /** One-off or combo lines at billing time; optional save to the product catalog. */
+  addCustomOrderItem(
+    orderId: string,
+    input: {
+      name: string;
+      unit_price_paise: number;
+      qty?: number;
+      tax_bps?: number;
+      save_to_catalog?: boolean;
+      business_id: string;
+      category_id?: string;
+    },
+  ): OrderItem {
+    this.require("pos.create_bill");
+    const name = input.name.trim();
+    if (!name) throw new Error("Item name is required");
+    if (!Number.isInteger(input.unit_price_paise) || input.unit_price_paise < 0) {
+      throw new Error("Price must be integer paise");
+    }
+    const qty = input.qty ?? 1;
+    if (qty <= 0) throw new Error("Quantity must be positive");
+    const order = this.mustOrder(orderId);
+    if (order.status === "PAID" || order.status === "CANCELLED") throw new Error("Order is closed");
+    if (order.status === "HELD") this.transitionOrder(orderId, "OPEN");
+
+    const defaultTax = this.state.products.find((p) => p.business_id === input.business_id && p.active)?.tax_bps ?? 500;
+    const tax_bps = input.tax_bps ?? defaultTax;
+
+    const lineMeta = this.meta();
+    let productId: string;
+    if (input.save_to_catalog) {
+      this.require("products.edit");
+      const categoryId =
+        input.category_id ??
+        this.state.products.find((p) => p.business_id === input.business_id)?.category_id ??
+        "cat-3";
+      const product = this.createProduct({
+        business_id: input.business_id,
+        category_id: categoryId,
+        name,
+        price_paise: input.unit_price_paise,
+        tax_bps,
+        tags: ["pos-saved"],
+      });
+      productId = product.id;
+    } else {
+      productId = `${POS_EPHEMERAL_PRODUCT_ID_PREFIX}${lineMeta.id}`;
+    }
+
+    const item: OrderItem = {
+      ...lineMeta,
+      order_id: orderId,
+      product_id: productId,
+      name,
+      qty,
+      unit_price_paise: input.unit_price_paise,
+      tax_bps,
+    };
+    this.state.orderItems.push(item);
+    this.enqueue("order_item", item.id, "CREATE", item);
     if (order.status === "OPEN") this.transitionOrder(orderId, "IN_PROGRESS");
     return item;
   }

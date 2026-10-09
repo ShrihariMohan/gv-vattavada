@@ -20,6 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { formatKolkata } from "@/domain/dates";
 import { toast } from "sonner";
 import { useMemo, useState } from "react";
 import { BillActions } from "@/ui/bill-actions";
@@ -48,6 +49,7 @@ export default function OrdersPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Placed</TableHead>
               <TableHead>Guest</TableHead>
               <TableHead>Phone</TableHead>
               <TableHead>Room</TableHead>
@@ -64,6 +66,9 @@ export default function OrdersPage() {
               const billed = invoiceForOrder(service.state, o.id);
               return (
                 <TableRow key={`${o.id}-${idx}`}>
+                  <TableCell className="whitespace-nowrap text-muted-foreground tabular-nums">
+                    {formatKolkata(o.created_at)}
+                  </TableCell>
                   <TableCell>{o.guest_name || "Walk-in"}</TableCell>
                   <TableCell className="tabular-nums">{o.guest_phone || "—"}</TableCell>
                   <TableCell>{o.room_number || "—"}</TableCell>

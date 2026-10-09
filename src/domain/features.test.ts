@@ -92,6 +92,51 @@ describe("order delete", () => {
 });
 
 describe("products and closing edits", () => {
+  it("adds custom POS lines and can save them to the catalog", () => {
+    const s = svc();
+    const order = s.startOrder({ business_id: "biz-rest" });
+    const productCount = s.state.products.length;
+    const line = s.addCustomOrderItem(order.id, {
+      business_id: "biz-rest",
+      name: "Festival combo",
+      unit_price_paise: 49900,
+      qty: 1,
+    });
+    expect(line.name).toBe("Festival combo");
+    expect(s.orderTotals(order.id).subtotal_paise).toBe(49900);
+    expect(s.state.products.length).toBe(productCount);
+    expect(line.product_id.startsWith("pos-line-")).toBe(true);
+    expect(s.state.products.some((p) => p.id === line.product_id)).toBe(false);
+
+    const saved = s.addCustomOrderItem(order.id, {
+      business_id: "biz-rest",
+      name: "Sunday brunch",
+      unit_price_paise: 35000,
+      save_to_catalog: true,
+    });
+    const catalog = s.state.products.find((p) => p.id === saved.product_id);
+    expect(catalog?.tags).toContain("pos-saved");
+    expect(catalog?.name).toBe("Sunday brunch");
+    expect(s.state.products.length).toBe(productCount + 1);
+  });
+
+  it("soft-deletes products and blocks delete while on an open ticket", () => {
+    const s = svc();
+    const p = s.createProduct({
+      business_id: "biz-rest",
+      category_id: "cat-3",
+      name: "Seasonal special",
+      price_paise: 12000,
+      tax_bps: 500,
+    });
+    const order = s.startOrder({ business_id: "biz-rest" });
+    s.addOrderItem(order.id, p.id, 1);
+    expect(() => s.deleteProduct(p.id)).toThrow(/open POS/);
+    s.setItemQty(s.state.orderItems.find((i) => i.product_id === p.id)!.id, 0);
+    s.deleteProduct(p.id);
+    expect(s.state.products.find((x) => x.id === p.id)?.deleted_at).toBeTruthy();
+  });
+
   it("creates and edits products without changing in-progress line prices", () => {
     const s = svc();
     const p = s.createProduct({

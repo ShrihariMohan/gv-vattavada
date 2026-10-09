@@ -306,6 +306,25 @@ export const PRODUCT_CATEGORIES = [
 
 export const PAYMENT_METHODS: PaymentMethod[] = ["CASH", "UPI", "CARD", "BANK_TRANSFER", "OTHER"];
 
+/** Order lines that are not backed by a catalog product (custom POS entries). */
+export const POS_EPHEMERAL_PRODUCT_ID_PREFIX = "pos-line-";
+
+/** Legacy one-off rows created before ephemeral product_id-only lines. */
+export function isPosAdhocProduct(tags: string[] | undefined): boolean {
+  return tags?.includes("pos-adhoc") ?? false;
+}
+
+export function isEphemeralPosLineReference(ref: { id?: string; tags?: string[] }): boolean {
+  if (ref.id?.startsWith(POS_EPHEMERAL_PRODUCT_ID_PREFIX)) return true;
+  return isPosAdhocProduct(ref.tags);
+}
+
+/** Staff catalog + public menu — excludes POS-only custom lines. */
+export function isCatalogProduct(product: { id: string; tags?: string[]; deleted_at?: string | null }): boolean {
+  if (product.deleted_at) return false;
+  return !isEphemeralPosLineReference(product);
+}
+
 export const MAX_KEYBOARD_RESULTS = 9;
 
 export type KeyboardDigit = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
