@@ -209,17 +209,19 @@ export class AppService {
   }
 
   pendingCount() {
-    return this.state.syncQueue.filter((q) => q.status !== "Failed" && !q.synced_at).length;
+    return this.state.syncQueue.filter((q) => !q.synced_at).length;
   }
 
   syncIndicator() {
     const pending = this.pendingCount();
+    const failed = this.state.syncQueue.filter((q) => q.status === "Failed" && !q.synced_at).length;
     return {
       online: this.state.online,
       pending,
+      failed,
       lastSyncedAt: this.state.lastSyncedAt,
       label: this.state.online ? "Online" : "Offline",
-      syncLabel: pending === 0 ? "All changes synced" : `${pending} changes pending`,
+      syncLabel: failed > 0 ? `${failed} changes failed` : pending === 0 ? "All changes synced" : `${pending} changes pending`,
     };
   }
 
@@ -1664,10 +1666,20 @@ export class AppService {
   }
 
   async processSyncQueue(adapter: SyncAdapter) {
-    const ordered = syncQueueDependencyOrder(this.state.syncQueue.filter((q) => !q.synced_at && q.status !== "Failed"));
+    const now = this.now();
+    const nowMs = Date.parse(now);
+    const ordered = syncQueueDependencyOrder(
+      this.state.syncQueue.filter((q) => {
+        if (q.synced_at || q.last_error === "CONFLICT") return false;
+        if (q.status !== "Failed" || !q.last_attempt_at) return true;
+        const retryDelayMs = Math.min(5 * 60_000, 5_000 * 2 ** Math.min(q.retry_count, 6));
+        return nowMs - Date.parse(q.last_attempt_at) >= retryDelayMs;
+      }),
+    );
     const results: { id: string; ok: boolean; error?: string }[] = [];
     for (const item of ordered) {
       item.status = "Syncing";
+      item.last_attempt_at = now;
       try {
         const remote = await Promise.resolve(adapter.push(item));
         if (remote.conflict) {
@@ -1688,6 +1700,7 @@ export class AppService {
         }
         item.status = "Pending";
         item.synced_at = this.now();
+        item.last_error = null;
         this.markEntity(item.entity_type, item.entity_id, "SYNCED", remote.server_id);
         results.push({ id: item.id, ok: true });
       } catch (e) {
@@ -1698,7 +1711,7 @@ export class AppService {
         results.push({ id: item.id, ok: false, error: item.last_error });
       }
     }
-    if (results.every((r) => r.ok) && ordered.length) this.state.lastSyncedAt = this.now();
+    if (results.length > 0 && results.every((r) => r.ok)) this.state.lastSyncedAt = this.now();
     return results;
   }
 
@@ -1936,11 +1949,28 @@ export class HttpSyncAdapter implements SyncAdapter {
   }
 
   async pull(since: string | null): Promise<RemoteSyncRecord[]> {
-    const url = since ? `/api/sync?since=${encodeURIComponent(since)}` : "/api/sync";
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`sync pull http ${res.status}`);
-    const data = (await res.json()) as { records?: RemoteSyncRecord[] };
-    return data.records ?? [];
+    const records: RemoteSyncRecord[] = [];
+    let offset = 0;
+    let until: string | null = null;
+    for (let page = 0; page < 10_000; page += 1) {
+      const params = new URLSearchParams();
+      if (since) params.set("since", since);
+      if (until) params.set("until", until);
+      if (offset) params.set("offset", String(offset));
+      const query = params.toString();
+      const res = await fetch(query ? `/api/sync?${query}` : "/api/sync");
+      if (!res.ok) throw new Error(`sync pull http ${res.status}`);
+      const data = (await res.json()) as {
+        records?: RemoteSyncRecord[];
+        until?: string;
+        next_offset?: number | null;
+      };
+      records.push(...(data.records ?? []));
+      until = data.until ?? until;
+      if (data.next_offset == null) return records;
+      offset = data.next_offset;
+    }
+    throw new Error("sync pull exceeded page safety limit");
   }
 }
 

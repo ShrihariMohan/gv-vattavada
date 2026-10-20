@@ -4,14 +4,19 @@ import { newEntityId } from "@/domain/service";
 import type { AppState, Role } from "@/domain/types";
 
 class LocalDb extends Dexie {
-  snapshots!: Table<{ id: string; state: AppState }>;
+  snapshots!: Table<{ id: string; state: AppState; saved_at?: string }>;
   constructor() {
     super("vattavada-business-manager");
     this.version(1).stores({ snapshots: "id" });
+    this.version(2).stores({ snapshots: "id,saved_at" });
   }
 }
 
 const db = typeof indexedDB === "undefined" ? null : new LocalDb();
+const RECOVERY_PREFIX = "recovery-";
+const RECOVERY_LIMIT = 5;
+const CHECKPOINT_INTERVAL_MS = 15 * 60_000;
+let lastCheckpointAt = 0;
 
 export async function loadState(): Promise<AppState | null> {
   if (!db) return null;
@@ -181,5 +186,57 @@ function keepNewestAndRemint<T extends { id: string; updated_at?: string; create
 
 export async function saveState(state: AppState): Promise<void> {
   if (!db) return;
-  await db.snapshots.put({ id: "primary", state });
+  const now = Date.now();
+  await db.transaction("rw", db.snapshots, async () => {
+    if (now - lastCheckpointAt >= CHECKPOINT_INTERVAL_MS) {
+      const current = await db.snapshots.get("primary");
+      if (current?.state) {
+        await db.snapshots.put({
+          id: `${RECOVERY_PREFIX}${now}`,
+          state: current.state,
+          saved_at: new Date(now).toISOString(),
+        });
+        await trimRecoverySnapshots();
+      }
+      lastCheckpointAt = now;
+    }
+    await db.snapshots.put({ id: "primary", state, saved_at: new Date(now).toISOString() });
+  });
+}
+
+async function trimRecoverySnapshots() {
+  if (!db) return;
+  const recoveries = (await db.snapshots.toArray())
+    .filter((row) => row.id.startsWith(RECOVERY_PREFIX))
+    .sort((a, b) => (b.saved_at ?? "").localeCompare(a.saved_at ?? ""));
+  const stale = recoveries.slice(RECOVERY_LIMIT);
+  if (stale.length) await db.snapshots.bulkDelete(stale.map((row) => row.id));
+}
+
+export type RecoverySnapshotSummary = {
+  id: string;
+  saved_at: string;
+  invoices: number;
+  orders: number;
+  bookings: number;
+};
+
+export async function listRecoverySnapshots(): Promise<RecoverySnapshotSummary[]> {
+  if (!db) return [];
+  return (await db.snapshots.toArray())
+    .filter((row) => row.id.startsWith(RECOVERY_PREFIX))
+    .sort((a, b) => (b.saved_at ?? "").localeCompare(a.saved_at ?? ""))
+    .map((row) => ({
+      id: row.id,
+      saved_at: row.saved_at ?? "",
+      invoices: row.state.invoices.length,
+      orders: row.state.orders.length,
+      bookings: row.state.bookings.length,
+    }));
+}
+
+export async function loadRecoverySnapshot(id: string): Promise<AppState | null> {
+  if (!db || !id.startsWith(RECOVERY_PREFIX)) return null;
+  const row = await db.snapshots.get(id);
+  return row?.state ? normalizeState(row.state) : null;
 }

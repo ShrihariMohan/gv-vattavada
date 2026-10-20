@@ -318,6 +318,7 @@ export interface SyncQueueItem {
   status: "Pending" | "Syncing" | "Failed";
   retry_count: number;
   last_error: string | null;
+  last_attempt_at?: string | null;
   created_at: string;
   synced_at: string | null;
   depends_on: string[];

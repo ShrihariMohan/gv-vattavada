@@ -3,6 +3,11 @@ import { Screen } from "@/ui/Screen";
 import { useApp } from "@/ui/AppProvider";
 import { reregisterAppServiceWorker, serviceWorkerStatus, unregisterAppServiceWorker } from "@/pwa/service-worker";
 import { backupCsvFiles, backupToJson, parseBackupJson } from "@/domain/backup";
+import {
+  listRecoverySnapshots,
+  loadRecoverySnapshot,
+  type RecoverySnapshotSummary,
+} from "@/db/persist";
 import { useEffect, useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +27,7 @@ export default function SettingsPage() {
   const { service, refresh, user, syncAdapter, restoreBackup, can } = useApp();
   const [sw, setSw] = useState({ registered: false, disabled: false });
   const [cloudBusy, setCloudBusy] = useState(false);
+  const [recoverySnapshots, setRecoverySnapshots] = useState<RecoverySnapshotSummary[]>([]);
   const canCloudBackup = can("settings.manage");
 
   const loadSw = async () => {
@@ -30,6 +36,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     void loadSw();
+    void listRecoverySnapshots().then(setRecoverySnapshots);
   }, []);
 
   return (
@@ -43,6 +50,46 @@ export default function SettingsPage() {
           <CardContent className="text-sm">
             <p className="font-mono">{service.state.currentDeviceId}</p>
             <p className="mt-1 text-muted-foreground">{user?.name} · {user?.role}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Local recovery points</CardTitle>
+            <CardDescription>
+              The app keeps up to five earlier Dexie snapshots before overwriting local state. These protect against a bad
+              sync or app update, but not against clearing all browser site data.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            {recoverySnapshots.length === 0 && (
+              <p className="text-sm text-muted-foreground">Recovery points will appear as this device is used.</p>
+            )}
+            {recoverySnapshots.map((snapshot) => (
+              <div key={snapshot.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+                <div>
+                  <p>{snapshot.saved_at ? new Date(snapshot.saved_at).toLocaleString() : "Earlier local state"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {snapshot.invoices} invoices · {snapshot.orders} orders · {snapshot.bookings} bookings
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    if (!window.confirm("Restore this earlier local state? A new recovery point of the current state will be kept.")) return;
+                    const incoming = await loadRecoverySnapshot(snapshot.id);
+                    if (!incoming) {
+                      toast.error("Recovery point is no longer available");
+                      return;
+                    }
+                    restoreBackup(incoming);
+                    toast.success("Local recovery point restored");
+                  }}
+                >
+                  Restore
+                </Button>
+              </div>
+            ))}
           </CardContent>
         </Card>
         <Card>

@@ -145,8 +145,11 @@ export function Shell({ children }: { children: ReactNode }) {
             <Badge variant={ind.online ? "secondary" : "destructive"} className="hidden sm:inline-flex">
               {ind.online ? "Online" : "Offline"}
             </Badge>
-            <Badge variant="outline" className="hidden lg:inline-flex border-sidebar-border text-sidebar-foreground">
-              {ind.pending ? `${ind.pending} pending` : "Synced"}
+            <Badge
+              variant={ind.failed ? "destructive" : "outline"}
+              className="hidden lg:inline-flex border-sidebar-border text-sidebar-foreground"
+            >
+              {ind.failed ? `${ind.failed} sync failed` : ind.pending ? `${ind.pending} pending` : "Synced"}
             </Badge>
             {!ind.online && mins != null && (
               <span className="hidden xl:inline text-xs text-sidebar-foreground/70">Last sync {mins}m ago</span>

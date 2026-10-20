@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
+const PULL_PAGE_SIZE = 1000;
+
 export async function GET(req: NextRequest) {
   const db = supabaseAdmin();
   const health = req.nextUrl.searchParams.get("health");
@@ -19,15 +21,29 @@ export async function GET(req: NextRequest) {
 
   if (!db) return NextResponse.json({ configured: false, records: [] });
   const since = req.nextUrl.searchParams.get("since");
+  const requestedUntil = req.nextUrl.searchParams.get("until");
+  const until = requestedUntil && !Number.isNaN(Date.parse(requestedUntil)) ? requestedUntil : new Date().toISOString();
+  const requestedOffset = Number(req.nextUrl.searchParams.get("offset") ?? "0");
+  const offset = Number.isSafeInteger(requestedOffset) && requestedOffset >= 0 ? requestedOffset : 0;
   let q = db
     .from("sync_records")
     .select("entity_type, entity_id, operation, payload, device_id, updated_at")
-    .order("updated_at", { ascending: true })
-    .limit(1000);
+    // Stable primary-key ordering makes offset pagination deterministic while
+    // `until` freezes the result set for the duration of a multi-page pull.
+    .order("entity_type", { ascending: true })
+    .order("entity_id", { ascending: true })
+    .lte("updated_at", until)
+    .range(offset, offset + PULL_PAGE_SIZE - 1);
   if (since) q = q.gt("updated_at", since);
   const { data, error } = await q;
   if (error) return NextResponse.json({ configured: true, error: error.message, records: [] }, { status: 500 });
-  return NextResponse.json({ configured: true, records: data ?? [] });
+  const records = data ?? [];
+  return NextResponse.json({
+    configured: true,
+    records,
+    until,
+    next_offset: records.length === PULL_PAGE_SIZE ? offset + records.length : null,
+  });
 }
 
 /** Cloud ingest for the Dexie sync queue. Local writes still happen first. */
@@ -68,11 +84,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ results });
   }
 
-  return NextResponse.json({
-    results: items.map((item: { entity_id?: string }) => ({
-      entity_id: item.entity_id,
-      server_id: item.entity_id ? `srv-${item.entity_id}` : null,
-      status: "SYNCED",
-    })),
-  });
+  return NextResponse.json(
+    {
+      configured: false,
+      error: "Supabase is not configured; local changes were not marked as synced.",
+    },
+    { status: 503 },
+  );
 }

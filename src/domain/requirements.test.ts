@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { addDays, businessDateInKolkata, daysBetween } from "./dates";
 import {
   addPaise,
@@ -35,7 +35,7 @@ import {
 } from "./rules";
 import { createSeedState } from "./seed";
 import { SEED_PASSWORDS } from "./seed-logins";
-import { AppService, invoicePrintModel, MemorySupabaseAdapter } from "./service";
+import { AppService, HttpSyncAdapter, invoicePrintModel, MemorySupabaseAdapter } from "./service";
 import { billFromOrder } from "./bill";
 import type { SyncQueueItem } from "./types";
 
@@ -138,6 +138,62 @@ describe("R6 R7 sync engine", () => {
     const second = await s.processSyncQueue(adapter);
     expect(second.every((r) => r.ok)).toBe(true);
     expect(s.state.invoices.filter((i) => i.invoice_type === "RESTAURANT" && i.notes !== "seed").every((i) => i.sync_status === "SYNCED")).toBe(true);
+  });
+
+  it("counts failed rows as unsynced and retries them automatically", async () => {
+    let now = new Date("2026-08-19T16:00:00.000Z");
+    const s = new AppService(createSeedState(), () => now);
+    s.login("admin", SEED_PASSWORDS.admin);
+    const order = s.startOrder({ business_id: "biz-rest" });
+    s.addOrderItem(order.id, "p-tea", 1);
+    s.generateBill({
+      orderId: order.id,
+      payments: [{ method: "CASH", amount_paise: s.orderTotals(order.id).total_paise }],
+    });
+    const adapter = new MemorySupabaseAdapter();
+    adapter.failNext = true;
+
+    await s.processSyncQueue(adapter);
+    expect(s.syncIndicator().failed).toBe(1);
+    expect(s.pendingCount()).toBeGreaterThan(0);
+
+    now = new Date(now.getTime() + 15_000);
+    await s.processSyncQueue(adapter);
+    expect(s.syncIndicator().failed).toBe(0);
+    expect(s.pendingCount()).toBe(0);
+  });
+
+  it("downloads every cloud page before applying a restore", async () => {
+    const rows = Array.from({ length: 1002 }, (_, index) => ({
+      entity_type: "invoice",
+      entity_id: `inv-${index}`,
+      operation: "CREATE",
+      payload: { id: `inv-${index}` },
+      updated_at: "2026-10-20T00:00:00.000Z",
+    }));
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input), "https://example.test");
+      const offset = Number(url.searchParams.get("offset") ?? "0");
+      const records = rows.slice(offset, offset + 1000);
+      return new Response(
+        JSON.stringify({
+          records,
+          until: "2026-10-20T01:00:00.000Z",
+          next_offset: records.length === 1000 ? offset + records.length : null,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const records = await new HttpSyncAdapter().pull(null);
+      expect(records).toHaveLength(1002);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1][0])).toContain("offset=1000");
+      expect(String(fetchMock.mock.calls[1][0])).toContain("until=");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
