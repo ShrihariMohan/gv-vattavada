@@ -2,21 +2,84 @@ import { csvEscape } from "@/domain/rules";
 import type { AppState } from "@/domain/types";
 
 export const BACKUP_FORMAT = "vattavada-business-manager-backup";
-export const BACKUP_VERSION = 1;
+/** v1 = whole AppState snapshot; v2 = normalized per-entity export (entity stores layout). */
+export const BACKUP_VERSION = 2;
 
-export type LocalBackup = {
+const ENTITY_KEYS = [
+  "customers",
+  "products",
+  "rooms",
+  "tables",
+  "bookings",
+  "orders",
+  "orderItems",
+  "invoices",
+  "invoiceItems",
+  "payments",
+  "expenses",
+  "ledger",
+  "dailyClosings",
+  "shifts",
+  "auditLogs",
+  "conflicts",
+] as const satisfies readonly (keyof AppState)[];
+
+const CATALOG_KEYS = [
+  "businesses",
+  "users",
+  "devices",
+  "roomTypes",
+  "productCategories",
+  "expenseCategories",
+  "invoiceCounters",
+] as const satisfies readonly (keyof AppState)[];
+
+export type LocalBackupV1 = {
   format: typeof BACKUP_FORMAT;
-  version: number;
+  version: 1;
   exported_at: string;
   state: AppState;
 };
 
-export function buildBackup(state: AppState): LocalBackup {
+export type LocalBackupV2 = {
+  format: typeof BACKUP_FORMAT;
+  version: 2;
+  schema: "entity-stores-v1";
+  exported_at: string;
+  device_id: string;
+  catalog: Record<(typeof CATALOG_KEYS)[number], unknown[]>;
+  entities: Record<(typeof ENTITY_KEYS)[number], unknown[]>;
+  outbox: AppState["syncQueue"];
+  meta: {
+    lastSyncedAt: string | null;
+    lastPulledAt: string | null;
+    syncCursor: number | null;
+    tax_enabled: boolean;
+  };
+  counts: Record<string, number>;
+};
+
+export type LocalBackup = LocalBackupV1 | LocalBackupV2;
+
+export function buildBackup(state: AppState): LocalBackupV2 {
+  const entities = Object.fromEntries(ENTITY_KEYS.map((k) => [k, state[k] ?? []])) as LocalBackupV2["entities"];
+  const catalog = Object.fromEntries(CATALOG_KEYS.map((k) => [k, state[k] ?? []])) as LocalBackupV2["catalog"];
   return {
     format: BACKUP_FORMAT,
-    version: BACKUP_VERSION,
+    version: 2,
+    schema: "entity-stores-v1",
     exported_at: new Date().toISOString(),
-    state,
+    device_id: state.currentDeviceId,
+    catalog,
+    entities,
+    outbox: (state.syncQueue ?? []).filter((q) => !q.synced_at),
+    meta: {
+      lastSyncedAt: state.lastSyncedAt ?? null,
+      lastPulledAt: state.lastPulledAt ?? null,
+      syncCursor: state.syncCursor ?? null,
+      tax_enabled: state.tax_enabled !== false,
+    },
+    counts: Object.fromEntries(ENTITY_KEYS.map((k) => [k, (state[k] ?? []).length])),
   };
 }
 
@@ -24,6 +87,28 @@ export function backupToJson(state: AppState): string {
   return JSON.stringify(buildBackup(state), null, 2);
 }
 
+function fromV2(row: LocalBackupV2): AppState {
+  if (!row.catalog || !row.entities) throw new Error("Backup v2 is missing catalog or entities");
+  const state = {
+    ...Object.fromEntries(CATALOG_KEYS.map((k) => [k, Array.isArray(row.catalog[k]) ? row.catalog[k] : []])),
+    ...Object.fromEntries(ENTITY_KEYS.map((k) => [k, Array.isArray(row.entities[k]) ? row.entities[k] : []])),
+    syncQueue: Array.isArray(row.outbox) ? row.outbox : [],
+    lastSyncedAt: row.meta?.lastSyncedAt ?? null,
+    lastPulledAt: row.meta?.lastPulledAt ?? null,
+    syncCursor: row.meta?.syncCursor ?? null,
+    tax_enabled: row.meta?.tax_enabled !== false,
+    currentUserId: null,
+    currentDeviceId: row.device_id ?? "",
+    online: true,
+  } as unknown as AppState;
+  for (const [key, expected] of Object.entries(row.counts ?? {})) {
+    const actual = (state[key as keyof AppState] as unknown[] | undefined)?.length ?? 0;
+    if (actual !== expected) throw new Error(`Backup is incomplete: ${key} has ${actual} rows, manifest says ${expected}`);
+  }
+  return state;
+}
+
+/** Accepts backup format v1 (whole snapshot) and v2 (normalized), returns an AppState. */
 export function parseBackupJson(text: string): AppState {
   let parsed: unknown;
   try {
@@ -32,12 +117,12 @@ export function parseBackupJson(text: string): AppState {
     throw new Error("That file is not valid JSON");
   }
   if (!parsed || typeof parsed !== "object") throw new Error("Invalid backup");
-  const row = parsed as Partial<LocalBackup> & { state?: AppState };
-  const state = row.state ?? (row as unknown as AppState);
+  const row = parsed as Partial<LocalBackupV1> & Partial<LocalBackupV2> & { state?: AppState };
+  if (row.format && row.format !== BACKUP_FORMAT) throw new Error("Unrecognized backup format");
+  const state = row.version === 2 ? fromV2(row as LocalBackupV2) : (row.state ?? (row as unknown as AppState));
   if (!state || !Array.isArray(state.businesses) || !Array.isArray(state.users)) {
     throw new Error("Backup is missing businesses or users");
   }
-  if (row.format && row.format !== BACKUP_FORMAT) throw new Error("Unrecognized backup format");
   return state;
 }
 

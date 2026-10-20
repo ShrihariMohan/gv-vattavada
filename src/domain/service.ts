@@ -89,6 +89,7 @@ export function emptyState(deviceId: string): AppState {
     conflicts: [],
     lastSyncedAt: null,
     lastPulledAt: null,
+    syncCursor: null,
     currentUserId: null,
     currentDeviceId: deviceId,
     online: true,
@@ -171,6 +172,7 @@ export class AppService {
       synced_at: null,
       depends_on,
     };
+    item.mutation_id = item.id;
     this.state.syncQueue.push(item);
     return item;
   }
@@ -1603,6 +1605,7 @@ export class AppService {
       table: this.state.tables,
       shift: this.state.shifts,
       daily_closing: this.state.dailyClosings,
+      ledger: this.state.ledger,
       user: this.state.users,
     };
     return collections[type] ?? null;
@@ -1611,6 +1614,19 @@ export class AppService {
   applyRemoteRecords(records: RemoteSyncRecord[]): number {
     if (!records.length) return 0;
     let applied = 0;
+    // id -> position per collection, built once per call (was a linear scan per record).
+    const indexes = new Map<{ id: string }[], Map<string, number>>();
+    const indexOf = (col: { id: string }[], id: string) => {
+      let index = indexes.get(col);
+      if (!index) {
+        index = new Map();
+        col.forEach((row, i) => {
+          if (!index!.has(row.id)) index!.set(row.id, i);
+        });
+        indexes.set(col, index);
+      }
+      return index.get(id) ?? -1;
+    };
     const pending = new Set(
       this.state.syncQueue.filter((q) => !q.synced_at).map((q) => `${q.entity_type}:${q.entity_id}`),
     );
@@ -1631,8 +1647,19 @@ export class AppService {
           payload = null;
         }
       }
+      if (rec.operation === "PURGE") {
+        // Archived on the server (outside the live retention window): drop the local copy.
+        const idx = indexOf(col, rec.entity_id);
+        if (idx >= 0) {
+          col.splice(idx, 1);
+          indexes.delete(col); // positions shifted; rebuild lazily
+          applied += 1;
+        }
+        continue;
+      }
       if (rec.operation === "DELETE") {
-        const row = col.find((x) => x.id === rec.entity_id) as { deleted_at?: string | null; sync_status?: string } | undefined;
+        const at = indexOf(col, rec.entity_id);
+        const row = (at >= 0 ? col[at] : undefined) as { deleted_at?: string | null; sync_status?: string } | undefined;
         if (row) {
           row.deleted_at = (payload?.deleted_at as string | undefined) ?? this.now();
           row.sync_status = "SYNCED";
@@ -1642,7 +1669,7 @@ export class AppService {
       }
       if (!payload || typeof payload.id !== "string") continue;
       if (payload.notes === "seed") continue;
-      const idx = col.findIndex((x) => x.id === payload!.id);
+      const idx = indexOf(col, payload.id as string);
       const remoteUpdated = String(payload.updated_at ?? rec.updated_at ?? "");
       if (idx >= 0) {
         const local = col[idx] as { updated_at?: string };
@@ -1651,6 +1678,7 @@ export class AppService {
         col[idx] = { ...col[idx], ...payload, sync_status: "SYNCED" } as unknown as { id: string };
       } else {
         col.push({ ...payload, sync_status: "SYNCED" } as unknown as { id: string });
+        indexes.get(col)?.set(payload.id as string, col.length - 1);
       }
       applied += 1;
     }
@@ -1659,9 +1687,40 @@ export class AppService {
     return applied;
   }
 
-  async pullFromRemote(adapter: SyncAdapter, opts?: { full?: boolean }): Promise<number> {
+  /**
+   * Incremental pull. Cursor mode (global change_seq) when the server supports it; otherwise the
+   * legacy timestamp pull. `full` restarts from the beginning (explicit snapshot resync).
+   */
+  async pullFromRemote(
+    adapter: SyncAdapter,
+    opts?: { full?: boolean; onProgress?: (pulled: number) => void },
+  ): Promise<number> {
+    if (adapter.pullCursor) {
+      let cursor = opts?.full ? 0 : (this.state.syncCursor ?? 0);
+      let applied = 0;
+      let pulled = 0;
+      for (let page = 0; page < 100_000; page += 1) {
+        const res = await adapter.pullCursor(cursor);
+        if (res.cursor_supported === false) break; // server still on legacy reads
+        if (res.resync_required) {
+          if (cursor === 0) throw new Error("Server requested a resync from an empty cursor");
+          cursor = 0; // explicit snapshot resync instead of silently returning partial data
+          continue;
+        }
+        applied += this.applyRemoteRecords(res.records);
+        pulled += res.records.length;
+        cursor = Math.max(cursor, res.next_cursor);
+        this.state.syncCursor = cursor;
+        opts?.onProgress?.(pulled);
+        if (!res.has_more) return applied;
+      }
+    }
     if (!adapter.pull) return 0;
-    const records = await adapter.pull(opts?.full ? null : this.state.lastPulledAt);
+    // Legacy timestamp pull: re-read a 2-minute overlap so a row committed just after the last
+    // pull is never skipped (re-applying a row is idempotent).
+    const last = this.state.lastPulledAt ? Date.parse(this.state.lastPulledAt) : Number.NaN;
+    const since = opts?.full || Number.isNaN(last) ? null : new Date(last - LEGACY_PULL_OVERLAP_MS).toISOString();
+    const records = await adapter.pull(since);
     return this.applyRemoteRecords(records);
   }
 
@@ -1677,6 +1736,12 @@ export class AppService {
       }),
     );
     const results: { id: string; ok: boolean; error?: string }[] = [];
+    if (adapter.pushBatch) {
+      await this.pushInBatches(adapter, ordered, now, results);
+      this.pruneAcknowledged();
+      if (results.length > 0 && results.every((r) => r.ok)) this.state.lastSyncedAt = this.now();
+      return results;
+    }
     for (const item of ordered) {
       item.status = "Syncing";
       item.last_attempt_at = now;
@@ -1712,7 +1777,79 @@ export class AppService {
       }
     }
     if (results.length > 0 && results.every((r) => r.ok)) this.state.lastSyncedAt = this.now();
+    this.pruneAcknowledged();
     return results;
+  }
+
+  /** Acknowledged outbox rows are deleted immediately; failed rows stay with backoff + error. */
+  pruneAcknowledged() {
+    if (this.state.syncQueue.some((q) => q.synced_at)) {
+      this.state.syncQueue = this.state.syncQueue.filter((q) => !q.synced_at);
+    }
+  }
+
+  private async pushInBatches(
+    adapter: SyncAdapter,
+    ordered: SyncQueueItem[],
+    now: string,
+    results: { id: string; ok: boolean; error?: string }[],
+  ) {
+    for (const batch of chunkSyncBatches(ordered)) {
+      for (const item of batch) {
+        item.status = "Syncing";
+        item.last_attempt_at = now;
+        item.mutation_id ??= item.id;
+      }
+      let response: SyncBatchResult[];
+      try {
+        response = await adapter.pushBatch!(batch);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        for (const item of batch) this.failItem(item, message, results);
+        // Network/server down: stop here; later batches would fail the same way.
+        for (const item of ordered.slice(ordered.indexOf(batch[batch.length - 1]) + 1)) {
+          if (item.status === "Syncing") item.status = "Pending";
+        }
+        return;
+      }
+      const byMutation = new Map(response.filter((r) => r.mutation_id).map((r) => [r.mutation_id!, r]));
+      batch.forEach((item, index) => {
+        const r = byMutation.get(item.mutation_id ?? item.id) ?? response[index];
+        if (!r) {
+          this.failItem(item, "no acknowledgement from server", results);
+        } else if (r.status === "CONFLICT") {
+          this.state.conflicts.push({
+            id: this.id("conflict"),
+            entity_type: item.entity_type,
+            entity_id: item.entity_id,
+            local_payload: item.payload,
+            remote_payload: r.remote_payload ?? "",
+            resolved: false,
+            created_at: this.now(),
+          });
+          this.markEntity(item.entity_type, item.entity_id, "CONFLICT");
+          item.status = "Failed";
+          item.last_error = "CONFLICT";
+          results.push({ id: item.id, ok: false, error: "CONFLICT" });
+        } else if (r.status === "SYNCED") {
+          item.status = "Pending";
+          item.synced_at = this.now();
+          item.last_error = null;
+          this.markEntity(item.entity_type, item.entity_id, "SYNCED", r.server_id ?? null);
+          results.push({ id: item.id, ok: true });
+        } else {
+          this.failItem(item, r.error || r.remote_payload || "sync failed", results);
+        }
+      });
+    }
+  }
+
+  private failItem(item: SyncQueueItem, message: string, results: { id: string; ok: boolean; error?: string }[]) {
+    item.status = "Failed";
+    item.retry_count += 1;
+    item.last_error = message;
+    this.markEntity(item.entity_type, item.entity_id, "FAILED");
+    results.push({ id: item.id, ok: false, error: message });
   }
 
   retryFailed() {
@@ -1768,6 +1905,7 @@ export class AppService {
       room: this.state.rooms,
       table: this.state.tables,
       daily_closing: this.state.dailyClosings,
+      ledger: this.state.ledger,
     };
     const row = collections[type]?.find((x) => x.id === id);
     if (row) {
@@ -1806,6 +1944,8 @@ export class AppService {
       ref_type: input.ref_type,
     };
     this.state.ledger.push(e);
+    // Ledger rows now reach the cloud so SQL reconciliation and reports can use them.
+    this.enqueue("ledger", e.id, "CREATE", e);
   }
 
   private releaseTable(tableId: string) {
@@ -1890,9 +2030,64 @@ export interface SyncPushResult {
   remote_payload?: string;
 }
 
+export interface SyncBatchResult {
+  mutation_id?: string | null;
+  entity_id?: string;
+  server_id?: string | null;
+  status: "SYNCED" | "FAILED" | "CONFLICT";
+  error?: string;
+  remote_payload?: string;
+}
+
+export interface CursorPage {
+  records: RemoteSyncRecord[];
+  next_cursor: number;
+  has_more: boolean;
+  /** false while the server still serves legacy reads only */
+  cursor_supported?: boolean;
+  /** cursor unknown to the server (restored DB, corrupted state): restart from 0 */
+  resync_required?: boolean;
+}
+
 export interface SyncAdapter {
   push(item: SyncQueueItem): SyncPushResult | Promise<SyncPushResult>;
   pull?(since: string | null): RemoteSyncRecord[] | Promise<RemoteSyncRecord[]>;
+  /** Idempotent batch push (≤ SYNC_BATCH_MAX_ITEMS items, ≤ SYNC_BATCH_MAX_BYTES). */
+  pushBatch?(items: SyncQueueItem[]): Promise<SyncBatchResult[]>;
+  /** Rows with change_seq greater than `after`. */
+  pullCursor?(after: number): Promise<CursorPage>;
+}
+
+export const SYNC_BATCH_MAX_ITEMS = 100;
+export const LEGACY_PULL_OVERLAP_MS = 2 * 60_000;
+export const SYNC_BATCH_MAX_BYTES = 512 * 1024;
+export const CLIENT_VERSION = "2.0.0-cursor-sync";
+
+/**
+ * Split an already dependency-ordered queue into request-sized batches. Order is preserved
+ * across batches, so a parent is always sent before (or with) its children; if a parent fails
+ * the server parks the child in quarantine and applies it once the parent arrives.
+ */
+export function chunkSyncBatches(
+  items: SyncQueueItem[],
+  maxItems = SYNC_BATCH_MAX_ITEMS,
+  maxBytes = SYNC_BATCH_MAX_BYTES - 16 * 1024,
+): SyncQueueItem[][] {
+  const batches: SyncQueueItem[][] = [];
+  let current: SyncQueueItem[] = [];
+  let bytes = 0;
+  for (const item of items) {
+    const size = item.payload.length + item.entity_id.length + 200;
+    if (current.length && (current.length >= maxItems || bytes + size > maxBytes)) {
+      batches.push(current);
+      current = [];
+      bytes = 0;
+    }
+    current.push(item);
+    bytes += size;
+  }
+  if (current.length) batches.push(current);
+  return batches;
 }
 
 export class MemorySupabaseAdapter implements SyncAdapter {
@@ -1929,7 +2124,138 @@ export class MemorySupabaseAdapter implements SyncAdapter {
   }
 }
 
+/**
+ * In-memory model of the normalized server: global change_seq, idempotent mutation ids,
+ * batch acknowledgements and cursor pages. Used by tests and offline demos.
+ */
+export class MemoryCursorAdapter implements SyncAdapter {
+  rows = new Map<string, RemoteSyncRecord & { change_seq: number }>();
+  applied = new Map<string, SyncBatchResult>();
+  seq = 0;
+  failNextBatch = false;
+  cursorSupported = true;
+  pageSize = 500;
+  requests = 0;
+
+  push(item: SyncQueueItem): SyncPushResult {
+    const [r] = this.applyItems([item]);
+    if (r.status === "FAILED") throw new Error(r.error ?? "failed");
+    return { server_id: r.server_id ?? undefined };
+  }
+
+  async pushBatch(items: SyncQueueItem[]): Promise<SyncBatchResult[]> {
+    this.requests += 1;
+    if (items.length > SYNC_BATCH_MAX_ITEMS) throw new Error("batch too large");
+    if (this.failNextBatch) {
+      this.failNextBatch = false;
+      throw new Error("network");
+    }
+    return this.applyItems(items);
+  }
+
+  private applyItems(items: SyncQueueItem[]): SyncBatchResult[] {
+    return items.map((item) => {
+      const mutation_id = item.mutation_id ?? item.id;
+      const done = this.applied.get(mutation_id);
+      if (done) return done;
+      let payload: unknown = item.payload;
+      try {
+        payload = JSON.parse(item.payload);
+      } catch {
+        payload = item.payload;
+      }
+      this.seq += 1;
+      this.rows.set(`${item.entity_type}:${item.entity_id}`, {
+        entity_type: item.entity_type,
+        entity_id: item.entity_id,
+        operation: item.operation === "DELETE" ? "DELETE" : "UPSERT",
+        payload,
+        updated_at: new Date().toISOString(),
+        change_seq: this.seq,
+      });
+      const result: SyncBatchResult = { mutation_id, entity_id: item.entity_id, server_id: `srv-${item.entity_id}`, status: "SYNCED" };
+      this.applied.set(mutation_id, result);
+      return result;
+    });
+  }
+
+  /** Simulates the archive purge: row removed, PURGE tombstone emitted. */
+  purge(entityType: EntityType, entityId: string) {
+    this.seq += 1;
+    this.rows.set(`${entityType}:${entityId}`, {
+      entity_type: entityType,
+      entity_id: entityId,
+      operation: "PURGE",
+      payload: { id: entityId },
+      change_seq: this.seq,
+    });
+  }
+
+  async pullCursor(after: number): Promise<CursorPage> {
+    this.requests += 1;
+    if (!this.cursorSupported) return { records: [], next_cursor: after, has_more: false, cursor_supported: false };
+    if (after > this.seq) return { records: [], next_cursor: 0, has_more: false, resync_required: true };
+    const page = [...this.rows.values()]
+      .filter((r) => r.change_seq > after)
+      .sort((a, b) => a.change_seq - b.change_seq)
+      .slice(0, this.pageSize);
+    return {
+      records: page,
+      next_cursor: page.length ? page[page.length - 1].change_seq : after,
+      has_more: page.length === this.pageSize,
+      cursor_supported: true,
+    };
+  }
+
+  pull(since: string | null) {
+    return [...this.rows.values()].filter((r) => !since || (r.updated_at && r.updated_at > since));
+  }
+}
+
 export class HttpSyncAdapter implements SyncAdapter {
+  constructor(private deviceId: () => string | null = () => null) {}
+
+  async pushBatch(items: SyncQueueItem[]): Promise<SyncBatchResult[]> {
+    const res = await fetch("/api/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-client-version": CLIENT_VERSION },
+      body: JSON.stringify({
+        device_id: this.deviceId(),
+        client_version: CLIENT_VERSION,
+        items: items.map((q) => ({
+          mutation_id: q.mutation_id ?? q.id,
+          entity_type: q.entity_type,
+          entity_id: q.entity_id,
+          operation: q.operation,
+          payload: q.payload,
+        })),
+      }),
+    });
+    if (!res.ok) throw new Error(`sync http ${res.status}`);
+    const data = (await res.json()) as { results?: SyncBatchResult[] };
+    return data.results ?? [];
+  }
+
+  async pullCursor(after: number): Promise<CursorPage> {
+    const params = new URLSearchParams({ after: String(after), limit: "500" });
+    const device = this.deviceId();
+    if (device) params.set("device_id", device);
+    const res = await fetch(`/api/sync?${params}`, { headers: { "x-client-version": CLIENT_VERSION } });
+    if (res.status === 409) return { records: [], next_cursor: 0, has_more: false, resync_required: true };
+    if (!res.ok) throw new Error(`sync pull http ${res.status}`);
+    const data = (await res.json()) as Partial<CursorPage> & { configured?: boolean };
+    if (data.configured === false || data.cursor_supported === false) {
+      return { records: [], next_cursor: after, has_more: false, cursor_supported: false };
+    }
+    return {
+      records: data.records ?? [],
+      next_cursor: Number(data.next_cursor ?? after),
+      has_more: Boolean(data.has_more),
+      cursor_supported: true,
+      resync_required: Boolean(data.resync_required),
+    };
+  }
+
   async push(item: SyncQueueItem): Promise<SyncPushResult> {
     const res = await fetch("/api/sync", {
       method: "POST",
@@ -1974,8 +2300,8 @@ export class HttpSyncAdapter implements SyncAdapter {
   }
 }
 
-export function createDefaultSyncAdapter(): SyncAdapter {
-  if (typeof window !== "undefined") return new HttpSyncAdapter();
+export function createDefaultSyncAdapter(deviceId?: () => string | null): SyncAdapter {
+  if (typeof window !== "undefined") return new HttpSyncAdapter(deviceId);
   if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_SYNC_ENABLED === "true") {
     return new HttpSyncAdapter();
   }

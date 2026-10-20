@@ -13,6 +13,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { AdminMigrationPanel } from "@/ui/admin-migration-panel";
 
 function downloadFile(name: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -300,6 +301,7 @@ export default function SettingsPage() {
             ))}
           </CardContent>
         </Card>
+        {user?.role === "ADMIN" && <AdminMigrationPanel service={service} />}
         <p className="text-xs text-muted-foreground">PWA: use Install / Add to Home Screen. Background Sync is optional; the app also flushes the queue on open, online, and every 15s.</p>
       </div>
     </Screen>

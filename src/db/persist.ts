@@ -2,6 +2,17 @@ import Dexie, { type Table } from "dexie";
 import { createCatalogState, DEMO_RECORD_IDS, stripDemoTransactions } from "@/domain/seed";
 import { newEntityId } from "@/domain/service";
 import type { AppState, Role } from "@/domain/types";
+import {
+  EntityDb,
+  EntityWriter,
+  getMeta,
+  loadFromEntityStores,
+  migrateSnapshotToEntityStores,
+  migrationComplete,
+  repairOrderFromSnapshot,
+  setMeta,
+  type MigrationReport,
+} from "./entity-store";
 
 class LocalDb extends Dexie {
   snapshots!: Table<{ id: string; state: AppState; saved_at?: string }>;
@@ -13,13 +24,131 @@ class LocalDb extends Dexie {
 }
 
 const db = typeof indexedDB === "undefined" ? null : new LocalDb();
+const edb = typeof indexedDB === "undefined" ? null : new EntityDb();
+const writer = edb ? new EntityWriter(edb) : null;
 const RECOVERY_PREFIX = "recovery-";
 const RECOVERY_LIMIT = 5;
 const CHECKPOINT_INTERVAL_MS = 15 * 60_000;
+/** While the rollback window is open, mirror state into the legacy `primary` snapshot this often. */
+const LEGACY_MIRROR_INTERVAL_MS = 5 * 60_000;
+const ROLLBACK_WINDOW_DAYS = 30;
+const ENTITY_STORE_SWITCH = "vbm-entity-store";
 let lastCheckpointAt = 0;
+let lastMirrorAt = 0;
+let legacyMirrorUntil: string | null = null;
 
+type StorageMode = "legacy" | "entity";
+
+/** Startup timing in the console when localStorage["vbm-timing"] = "1" (diagnostics only). */
+function timing(label: string, started: number) {
+  try {
+    if (typeof localStorage !== "undefined" && localStorage.getItem("vbm-timing") === "1") {
+      console.info(`[vbm] ${label}: ${Math.round(performance.now() - started)} ms (t=${Math.round(performance.now())})`);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+let mode: StorageMode = "legacy";
+
+/** Device-level kill switch (Settings): "off" keeps using the legacy snapshot. */
+export function entityStoreEnabled(): boolean {
+  try {
+    return typeof localStorage === "undefined" || localStorage.getItem(ENTITY_STORE_SWITCH) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+export function setEntityStoreEnabled(enabled: boolean) {
+  try {
+    if (enabled) localStorage.removeItem(ENTITY_STORE_SWITCH);
+    else localStorage.setItem(ENTITY_STORE_SWITCH, "off");
+  } catch {
+    /* private mode: nothing to persist */
+  }
+}
+
+export function storageMode(): StorageMode {
+  return mode;
+}
+
+export function entityDb(): EntityDb | null {
+  return mode === "entity" ? edb : null;
+}
+
+export type EntityStoreStatus = {
+  mode: StorageMode;
+  enabled: boolean;
+  migration: { at: string; report?: MigrationReport; fresh?: boolean } | null;
+  failed: { at: string; report: MigrationReport } | null;
+  legacyMirrorUntil: string | null;
+};
+
+export async function entityStoreStatus(): Promise<EntityStoreStatus> {
+  return {
+    mode,
+    enabled: entityStoreEnabled(),
+    migration: edb ? ((await getMeta(edb, "migration_complete")) ?? null) : null,
+    failed: edb ? ((await getMeta(edb, "migration_failed")) ?? null) : null,
+    legacyMirrorUntil,
+  };
+}
+
+/**
+ * Startup load. First launch after the update copies the legacy snapshot into per-entity
+ * stores (validated, resumable); the legacy snapshot is never cleared. If anything fails the
+ * app keeps running on the legacy snapshot exactly as before.
+ */
 export async function loadState(): Promise<AppState | null> {
   if (!db) return null;
+  if (edb && writer && entityStoreEnabled()) {
+    try {
+      const t0 = performance.now();
+      if (await migrationComplete(edb)) {
+        const state = await loadFromEntityStores(edb);
+        if (!(await edb.sync_meta.get("order.products"))) {
+          await repairOrderFromSnapshot(edb, state, (await db.snapshots.get("primary"))?.state);
+        }
+        timing("load entity stores", t0);
+        legacyMirrorUntil = (await getMeta<string>(edb, "legacy_mirror_until")) ?? null;
+        writer.prime(state);
+        timing("prime change tracker", t0);
+        mode = "entity";
+        lastCheckpointAt = Date.now(); // first recovery point 15 min after start, not during startup
+        lastMirrorAt = Date.now();
+        const normalized = state.users.length || state.businesses.length ? normalizeState(state) : null;
+        timing("normalize", t0);
+        return normalized;
+      }
+      const row = await db.snapshots.get("primary");
+      if (!row?.state) {
+        // Brand-new device: nothing to migrate.
+        await setMeta(edb, "migration_complete", { at: new Date().toISOString(), fresh: true });
+        writer.prime({} as AppState);
+        mode = "entity";
+        return null;
+      }
+      timing("read legacy snapshot", t0);
+      const report = await migrateSnapshotToEntityStores(edb, row.state);
+      timing("migrate + validate", t0);
+      if (report.ok) {
+        legacyMirrorUntil = new Date(Date.now() + ROLLBACK_WINDOW_DAYS * 86_400_000).toISOString();
+        await setMeta(edb, "legacy_mirror_until", legacyMirrorUntil);
+        const state = await loadFromEntityStores(edb);
+        writer.prime(state);
+        mode = "entity";
+        lastCheckpointAt = Date.now();
+        lastMirrorAt = Date.now(); // the legacy snapshot is identical right after migrating
+        timing("first launch total", t0);
+        return normalizeState(state);
+      }
+      console.warn("Entity store migration failed validation; staying on the legacy snapshot", report.errors);
+    } catch (e) {
+      console.warn("Entity store unavailable; staying on the legacy snapshot", e);
+    }
+  }
+  mode = "legacy";
   const row = await db.snapshots.get("primary");
   return row?.state ? normalizeState(row.state) : null;
 }
@@ -186,6 +315,13 @@ function keepNewestAndRemint<T extends { id: string; updated_at?: string; create
 
 export async function saveState(state: AppState): Promise<void> {
   if (!db) return;
+  if (mode === "entity" && writer) {
+    const t0 = performance.now();
+    await writer.save(state);
+    timing("incremental save", t0);
+    await entityModeCheckpoints(state);
+    return;
+  }
   const now = Date.now();
   await db.transaction("rw", db.snapshots, async () => {
     if (now - lastCheckpointAt >= CHECKPOINT_INTERVAL_MS) {
@@ -201,6 +337,29 @@ export async function saveState(state: AppState): Promise<void> {
       lastCheckpointAt = now;
     }
     await db.snapshots.put({ id: "primary", state, saved_at: new Date(now).toISOString() });
+  });
+}
+
+/** Recovery points (every 15 min) and, during the rollback window, the legacy mirror. */
+async function entityModeCheckpoints(state: AppState) {
+  if (!db) return;
+  const now = Date.now();
+  const mirror =
+    legacyMirrorUntil != null && now < Date.parse(legacyMirrorUntil) && now - lastMirrorAt >= LEGACY_MIRROR_INTERVAL_MS;
+  const checkpoint = now - lastCheckpointAt >= CHECKPOINT_INTERVAL_MS;
+  if (!mirror && !checkpoint) return;
+  const copy = state; // put() structured-clones synchronously, so later in-place edits cannot leak in
+  await db.transaction("rw", db.snapshots, async () => {
+    if (checkpoint) {
+      await db.snapshots.put({ id: `${RECOVERY_PREFIX}${now}`, state: copy, saved_at: new Date(now).toISOString() });
+      await trimRecoverySnapshots();
+      lastCheckpointAt = now;
+    }
+    if (mirror) {
+      // Keeps the previous client usable if we roll back during the 30-day window.
+      await db.snapshots.put({ id: "primary", state: copy, saved_at: new Date(now).toISOString() });
+      lastMirrorAt = now;
+    }
   });
 }
 

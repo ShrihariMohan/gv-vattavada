@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:sql": "scripts/migration/test-sql.sh",
+    "migration:e2e": "node scripts/migration/e2e-api.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

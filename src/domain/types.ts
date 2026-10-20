@@ -57,6 +57,7 @@ export type EntityType =
   | "table"
   | "shift"
   | "daily_closing"
+  | "ledger"
   | "user";
 
 export interface SyncMeta {
@@ -322,6 +323,8 @@ export interface SyncQueueItem {
   created_at: string;
   synced_at: string | null;
   depends_on: string[];
+  /** Idempotency key sent with batch pushes; equals `id` (unique per device). */
+  mutation_id?: string;
 }
 
 export interface InvoiceCounter {
@@ -366,6 +369,8 @@ export interface AppState {
   conflicts: ConflictRecord[];
   lastSyncedAt: string | null;
   lastPulledAt: string | null;
+  /** Last acknowledged global change_seq for cursor sync (null = never pulled by cursor). */
+  syncCursor?: number | null;
   currentUserId: string | null;
   currentDeviceId: string;
   online: boolean;

@@ -1,3 +1,5 @@
+-- Current-schema reference only. The source of truth is supabase/migrations/ (apply with `supabase db push`).
+-- This file is regenerated after the migrations are proven in production; the cloud export route embeds it.
 -- Run in the Supabase SQL editor before seed.sql.
 -- Dexie on each device remains the first write; this table is the cloud copy of the queue.
 

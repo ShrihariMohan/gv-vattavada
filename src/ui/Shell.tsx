@@ -91,7 +91,7 @@ export function StaffFrame({ children }: { children: ReactNode }) {
 }
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { ready, user, service, logout } = useApp();
+  const { ready, user, service, logout, syncing, syncDetail } = useApp();
   const path = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const router = useRouter();
@@ -149,7 +149,13 @@ export function Shell({ children }: { children: ReactNode }) {
               variant={ind.failed ? "destructive" : "outline"}
               className="hidden lg:inline-flex border-sidebar-border text-sidebar-foreground"
             >
-              {ind.failed ? `${ind.failed} sync failed` : ind.pending ? `${ind.pending} pending` : "Synced"}
+              {syncing
+                ? syncDetail || "Syncing…"
+                : ind.failed
+                  ? `${ind.failed} sync failed`
+                  : ind.pending
+                    ? `${ind.pending} pending`
+                    : "Synced"}
             </Badge>
             {!ind.online && mins != null && (
               <span className="hidden xl:inline text-xs text-sidebar-foreground/70">Last sync {mins}m ago</span>

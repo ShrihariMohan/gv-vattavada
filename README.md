@@ -25,6 +25,8 @@ Install as a PWA from the browser (Add to Home Screen). Public pages and the sta
 
 ## Architecture
 
+Full diagrams (system overview + every flow, editable in Excalidraw): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Migration runbook: [docs/MIGRATION-RUNBOOK.md](docs/MIGRATION-RUNBOOK.md).
+
 UI → local Dexie/IndexedDB (AppService) → sync queue → optional `/api/sync` or in-memory adapter.
 
 Money is integer **paise**. Timestamps are UTC; business dates use Asia/Kolkata.

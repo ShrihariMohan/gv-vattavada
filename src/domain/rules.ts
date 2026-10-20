@@ -93,6 +93,8 @@ export function syncQueueDependencyOrder(items: SyncQueueItem[]): SyncQueueItem[
   const entityRank: Record<string, number> = {
     customer: 0,
     product: 1,
+    room: 1,
+    table: 1,
     order: 2,
     order_item: 3,
     booking: 2,
@@ -100,7 +102,9 @@ export function syncQueueDependencyOrder(items: SyncQueueItem[]): SyncQueueItem[
     invoice_item: 5,
     payment: 6,
     expense: 6,
+    ledger: 6,
     daily_closing: 7,
+    shift: 7,
   };
   return [...items].sort((a, b) => {
     const oa = rank[a.operation];

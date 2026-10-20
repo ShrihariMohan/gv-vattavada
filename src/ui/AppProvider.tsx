@@ -2,7 +2,7 @@
 
 import { createCatalogState } from "@/domain/seed";
 import { AppService, createDefaultSyncAdapter, type SyncAdapter } from "@/domain/service";
-import { loadState, mergeLocalSafety, normalizeState, saveState } from "@/db/persist";
+import { loadState, normalizeState, saveState } from "@/db/persist";
 import type { AppState, Role, User } from "@/domain/types";
 import { registerAppServiceWorker } from "@/pwa/service-worker";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -17,6 +17,10 @@ type Ctx = {
   can: (action: Parameters<AppService["require"]>[0]) => boolean;
   syncAdapter: SyncAdapter;
   restoreBackup: (incoming: AppState) => void;
+  /** Background sync progress (startup never waits for the cloud). */
+  syncing: boolean;
+  syncDetail: string;
+  syncNow: (opts?: { full?: boolean }) => Promise<void>;
 };
 
 const AppCtx = createContext<Ctx | null>(null);
@@ -32,30 +36,57 @@ function deviceId() {
   return id;
 }
 
+function currentDeviceId() {
+  return typeof window === "undefined" ? null : deviceId();
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [tick, setTick] = useState(0);
   const svc = useRef<AppService | null>(null);
-  const adapter = useRef<SyncAdapter>(createDefaultSyncAdapter());
+  const adapter = useRef<SyncAdapter>(createDefaultSyncAdapter(currentDeviceId));
   const flushing = useRef(false);
+  const cloudConfigured = useRef<boolean | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncDetail, setSyncDetail] = useState("");
 
   const persistTick = useCallback(() => {
     if (svc.current) void saveState(svc.current.state);
     setTick((t) => t + 1);
   }, []);
 
-  const flushQueue = useCallback(async () => {
+  /**
+   * Push the outbox in batches, then pull only what changed (cursor, or the legacy timestamp
+   * pull with overlap while the server is still on legacy reads). Never blocks rendering.
+   */
+  const flushQueue = useCallback(async (opts?: { full?: boolean }) => {
     if (!svc.current?.state.online || flushing.current) return;
     flushing.current = true;
     try {
+      if (cloudConfigured.current === null) {
+        const health = await fetch("/api/sync?health=1");
+        const info = (await health.json()) as { configured?: boolean };
+        cloudConfigured.current = Boolean(info.configured);
+      }
+      if (!cloudConfigured.current) return;
+      setSyncing(true);
+      const pending = svc.current.pendingCount();
+      if (pending) setSyncDetail(`Uploading ${pending} changes…`);
       await svc.current.processSyncQueue(adapter.current);
-      await svc.current.pullFromRemote(adapter.current, { full: true });
+      setSyncDetail("Downloading changes…");
+      const first = !svc.current.state.lastPulledAt && svc.current.state.syncCursor == null;
+      await svc.current.pullFromRemote(adapter.current, {
+        full: opts?.full || first,
+        onProgress: (n) => setSyncDetail(`Downloaded ${n} changes…`),
+      });
       await saveState(svc.current.state);
       setTick((t) => t + 1);
     } catch {
       /* stay on local Dexie if cloud is down */
     } finally {
       flushing.current = false;
+      setSyncing(false);
+      setSyncDetail("");
     }
   }, []);
 
@@ -67,45 +98,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const stored = await loadState();
-      const catalog = createCatalogState(deviceId());
-      catalog.currentDeviceId = deviceId();
-      catalog.online = navigator.onLine;
-      if (stored) mergeLocalSafety(catalog, stored);
-      if (cancelled) return;
-      svc.current = new AppService(catalog);
+      // Render from local indexed data immediately; cloud sync runs in the background.
+      let stored: AppState | null = null;
       try {
-        const health = await fetch("/api/sync?health=1");
-        const info = (await health.json()) as { configured?: boolean };
-        if (info.configured) {
-          await svc.current.processSyncQueue(adapter.current);
-          await svc.current.pullFromRemote(adapter.current, { full: true });
-          if (stored) mergeLocalSafety(svc.current.state, stored);
-          await saveState(svc.current.state);
-        } else if (stored) {
-          svc.current.replaceState(normalizeState(stored));
-          svc.current.state.currentDeviceId = deviceId();
-        }
+        stored = await loadState();
       } catch {
-        if (stored) {
-          svc.current.replaceState(normalizeState(stored));
-          svc.current.state.currentDeviceId = deviceId();
-        }
+        stored = null;
       }
-      if (!cancelled) {
-        setReady(true);
-        persistTick();
+      let state: AppState;
+      if (stored) {
+        state = stored;
+      } else {
+        state = createCatalogState(deviceId());
       }
+      state.currentDeviceId = deviceId();
+      state.online = navigator.onLine;
+      if (cancelled) return;
+      svc.current = new AppService(state);
+      setReady(true);
+      setTick((t) => t + 1);
+      // Persist after first paint (normalization may have touched rows); never on the startup path.
+      window.setTimeout(() => {
+        if (svc.current) void saveState(svc.current.state);
+      }, 1_000);
     })();
     return () => {
       cancelled = true;
     };
-  }, [persistTick]);
+  }, []);
 
   useEffect(() => {
     if (!ready) return;
     void flushQueue();
   }, [ready, flushQueue]);
+
+  useEffect(() => {
+    // Flush pending saves when the tab is hidden/closed so nothing is lost on mobile.
+    const onHide = () => {
+      if (svc.current) void saveState(svc.current.state);
+    };
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onHide);
+    };
+  }, []);
 
   useEffect(() => {
     const on = () => {
@@ -165,6 +203,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       },
       syncAdapter: adapter.current,
+      syncing,
+      syncDetail,
+      syncNow: flushQueue,
       restoreBackup: (incoming: AppState) => {
         const keepUser = service.state.currentUserId;
         const next = normalizeState(incoming);
@@ -175,7 +216,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         refresh();
       },
     };
-  }, [ready, refresh, tick]);
+  }, [ready, refresh, tick, syncing, syncDetail, flushQueue]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }
